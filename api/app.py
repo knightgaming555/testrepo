@@ -611,7 +611,7 @@ def admin_config():
       - stored_users: A list of usernames for which credentials are stored.
     """
     config_data = {
-        "version_number": version_number,
+        "version_number": version_number2,
         "whitelist": whitelist,
         "stored_users": list(get_all_stored_users().keys()),
     }
@@ -630,11 +630,11 @@ def admin_update_config():
         return "Both config_key and config_value are required.", 400
     config_key = config_key.upper()
     set_config(config_key, config_value)
-    global whitelist, version_number
+    global whitelist, version_number2
     if config_key == "WHITELIST":
         whitelist = config_value.split(",")
     elif config_key == "VERSION_NUMBER":
-        version_number = config_value
+        version_number2 = config_value
     return f"Configuration {config_key} updated to {config_value}.", 200
 
 
