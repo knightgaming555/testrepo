@@ -1,0 +1,11 @@
+Flask
+flask-cors
+python-dotenv
+cryptography
+requests
+requests_ntlm
+beautifulsoup4
+selectolax
+lxml
+Redis
+
