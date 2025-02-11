@@ -9,7 +9,7 @@ from cryptography.fernet import Fernet
 import redis
 import json
 
-from scraping import (
+from api.scraping import (
     authenticate_user,
     scrape_guc_data,
     scrape_schedule,
