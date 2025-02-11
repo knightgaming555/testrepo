@@ -38,7 +38,7 @@ redis_client = redis.from_url(os.environ.get("REDIS_URL"))
 
 
 def get_config(key, default_value):
-    """Retrieve a persistent configuration value from Redis, or initialize it with a default."""
+    """Retrieve a persistent configuration value from Redis, or initialize it with a default"""
     value = redis_client.get(key)
     if value is not None:
         return value.decode()
