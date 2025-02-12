@@ -11,7 +11,7 @@ import json
 import logging  # Import logging module
 from datetime import datetime
 
-from api.scraping import (
+from scraping import (
     authenticate_user,
     scrape_guc_data,
     scrape_schedule,
@@ -73,9 +73,9 @@ def set_config(key, value):
 # Global variables for whitelist, version and now configurable URLs
 whitelist = get_config(
     "WHITELIST",
-    os.environ.get("WHITELIST", "mohamed.elsaadi,seif.elkady,malak.mohamedelkady"),
+    os.environ.get("WHITELIST"),
 ).split(",")
-version_number2 = get_config("VERSION_NUMBER", os.environ.get("VERSION_NUMBER", "1.2"))
+version_number2 = get_config("VERSION_NUMBER", os.environ.get("VERSION_NUMBER"))
 BASE_SCHEDULE_URL = get_config(
     "BASE_SCHEDULE_URL_CONFIG", config.BASE_SCHEDULE_URL_CONFIG
 )  # Load from Redis or Config class
