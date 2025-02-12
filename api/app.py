@@ -11,7 +11,7 @@ import json
 import logging  # Import logging module
 from datetime import datetime
 
-from scraping import (
+from api.scraping import (
     authenticate_user,
     scrape_guc_data,
     scrape_schedule,
@@ -81,7 +81,12 @@ whitelist = (
     else []
 )
 
-version_number2 = get_config("VERSION_NUMBER", os.environ.get("VERSION_NUMBER"))
+# Fetch VERSION_NUMBER from Redis
+version_number_raw = redis_client.get("VERSION_NUMBER")
+
+# Decode or default to None
+version_number2 = version_number_raw.decode() if version_number_raw else None
+
 BASE_SCHEDULE_URL = get_config(
     "BASE_SCHEDULE_URL_CONFIG", config.BASE_SCHEDULE_URL_CONFIG
 )  # Load from Redis or Config class
@@ -1048,6 +1053,13 @@ def debug_redis_whitelist():
     return jsonify(
         {"redis_whitelist": whitelist_raw.decode() if whitelist_raw else None}
     )
+
+
+@app.route("/debug/version", methods=["GET"])
+def debug_version():
+    version_number_raw = redis_client.get("VERSION_NUMBER")
+    version_number = version_number_raw.decode() if version_number_raw else None
+    return jsonify({"version_number": version_number})
 
 
 # For local testing only. Vercel will import the app as a WSGI application.
