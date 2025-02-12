@@ -11,7 +11,7 @@ import json
 import logging  # Import logging module
 from datetime import datetime
 
-from api.scraping import (
+from scraping import (
     authenticate_user,
     scrape_guc_data,
     scrape_schedule,
@@ -71,10 +71,16 @@ def set_config(key, value):
 
 
 # Global variables for whitelist, version and now configurable URLs
-whitelist = get_config(
-    "WHITELIST",
-    os.environ.get("WHITELIST"),
-).split(",")
+# Fetch the WHITELIST from Redis
+whitelist_raw = redis_client.get("WHITELIST")
+
+# Decode, split, and strip spaces
+whitelist = (
+    [user.strip() for user in whitelist_raw.decode().split(",")]
+    if whitelist_raw
+    else []
+)
+
 version_number2 = get_config("VERSION_NUMBER", os.environ.get("VERSION_NUMBER"))
 BASE_SCHEDULE_URL = get_config(
     "BASE_SCHEDULE_URL_CONFIG", config.BASE_SCHEDULE_URL_CONFIG
@@ -1029,6 +1035,19 @@ def admin_restart():
         sys.executable, ["python"] + sys.argv
     )  # Restart the script with the same args
     return "Restarting...", 200
+
+
+@app.route("/debug/whitelist", methods=["GET"])
+def debug_whitelist():
+    return jsonify({"whitelist": whitelist})
+
+
+@app.route("/debug/redis_whitelist", methods=["GET"])
+def debug_redis_whitelist():
+    whitelist_raw = redis_client.get("WHITELIST")
+    return jsonify(
+        {"redis_whitelist": whitelist_raw.decode() if whitelist_raw else None}
+    )
 
 
 # For local testing only. Vercel will import the app as a WSGI application.
