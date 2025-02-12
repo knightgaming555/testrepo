@@ -11,7 +11,7 @@ import json
 import logging  # Import logging module
 from datetime import datetime
 
-from scraping import (
+from api.scraping import (
     authenticate_user,
     scrape_guc_data,
     scrape_schedule,
