@@ -1,16 +1,23 @@
 {
-    "version": 2,
-    "builds": [
-      {
-        "src": "api/app.py",
-        "use": "@vercel/python"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "api/app.py"
-      }
-    ]
-  }
-  
+  "version": 2,
+  "builds": [
+    { "src": "api/login.py", "use": "@vercel/python" },
+    { "src": "api/guc_data.py", "use": "@vercel/python" },
+    { "src": "api/schedule.py", "use": "@vercel/python" },
+    { "src": "api/cms_data.py", "use": "@vercel/python" },
+    { "src": "api/cms_content.py", "use": "@vercel/python" },
+    { "src": "api/grades.py", "use": "@vercel/python" },
+    { "src": "api/attendance.py", "use": "@vercel/python" },
+    { "src": "api/exam_seats.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/api/login", "dest": "api/login.py" },
+    { "src": "/api/guc_data", "dest": "api/guc_data.py" },
+    { "src": "/api/schedule", "dest": "api/schedule.py" },
+    { "src": "/api/cms_data", "dest": "api/cms_data.py" },
+    { "src": "/api/cms_content", "dest": "api/cms_content.py" },
+    { "src": "/api/grades", "dest": "api/grades.py" },
+    { "src": "/api/attendance", "dest": "api/attendance.py" },
+    { "src": "/api/exam_seats", "dest": "api/exam_seats.py" }
+  ]
+}
