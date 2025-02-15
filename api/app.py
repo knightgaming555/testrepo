@@ -30,11 +30,11 @@ class Config:
     DEBUG = True
     CACHE_REFRESH_SECRET = os.environ.get("CACHE_REFRESH_SECRET", "my_refresh_secret")
     ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
-    BASE_SCHEDULE_URL_CONFIG = os.environ.get(
+    BASE_SCHEDULE_URL = os.environ.get(
         "BASE_SCHEDULE_URL",
         "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx",
     )  # Configurable schedule URL
-    BASE_ATTENDANCE_URL_CONFIG = os.environ.get(
+    BASE_ATTENDANCE_URL = os.environ.get(
         "BASE_ATTENDANCE_URL",
         "https://apps.guc.edu.eg/student_ext/Attendance/ClassAttendance_ViewStudentAttendance_001.aspx",
     )  # Configurable attendance URL
@@ -70,32 +70,25 @@ def set_config(key, value):
     redis_client.set(key, value)
 
 
-# Global variables for whitelist, version and now configurable URLs
-# Fetch the WHITELIST from Redis
-whitelist_raw = redis_client.get("WHITELIST")
-
-# Decode, split, and strip spaces
-whitelist = (
-    [user.strip() for user in whitelist_raw.decode().split(",")]
-    if whitelist_raw
-    else []
-)
-
-# Fetch VERSION_NUMBER from Redis
-version_number_raw = redis_client.get("VERSION_NUMBER")
-
-# Decode or default to None
-version_number2 = version_number_raw.decode() if version_number_raw else None
-
-BASE_SCHEDULE_URL = get_config(
-    "BASE_SCHEDULE_URL_CONFIG", config.BASE_SCHEDULE_URL_CONFIG
-)  # Load from Redis or Config class
-BASE_ATTENDANCE_URL = get_config(
-    "BASE_ATTENDANCE_URL_CONFIG", config.BASE_ATTENDANCE_URL_CONFIG
-)  # Load from Redis or Config class
+def get_whitelist():
+    whitelist_raw = redis_client.get("WHITELIST")
+    if whitelist_raw:
+        return [user.strip() for user in whitelist_raw.decode().split(",")]
+    else:
+        return []
 
 
-# In-memory dictionary for storing user credentials for testing.
+def get_version_number():
+    version_raw = redis_client.get("VERSION_NUMBER")
+    return version_raw.decode() if version_raw else None
+
+
+def get_base_schedule_url():
+    return get_config("BASE_SCHEDULE_URL_CONFIG", config.BASE_SCHEDULE_URL)
+
+
+def get_base_attendance_url():
+    return get_config("BASE_ATTENDANCE_URL_CONFIG", config.BASE_ATTENDANCE_URL)
 
 
 # Initialize Fernet using the provided encryption key.
@@ -103,7 +96,7 @@ fernet = Fernet(config.ENCRYPTION_KEY)
 
 
 def is_user_authorized(username):
-    return username in whitelist
+    return username in get_whitelist()
 
 
 def store_user_credentials(username, password):
@@ -161,529 +154,6 @@ def index():
     return jsonify({"message": "Welcome to the API!"}), 200
 
 
-@app.route("/api/login", methods=["POST"])
-def api_login():
-    """
-    Authenticate the user and store their encrypted credentials.
-    Checks the provided version number and ensures the user is authorized.
-    """
-    data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
-    # Check version number (from query parameters)
-    version_number = request.args.get("version_number")
-    if version_number != version_number2:
-        return (
-            jsonify(
-                {"status": "error", "message": "Incorrect version number", "data": None}
-            ),
-            403,
-        )
-    if not username or not password:
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-    if not authenticate_user(username, password):
-        return (
-            jsonify(
-                {"status": "error", "message": "Invalid credentials", "data": None}
-            ),
-            401,
-        )
-    store_user_credentials(username, password)
-    return jsonify({"status": "success", "username": username}), 200
-
-
-@app.route("/api/guc_data", methods=["GET"])
-def api_guc_data():
-    """
-    Return the user's scraped GUC data (student info and notifications).
-    Checks version number, whitelist, validates credentials, and stores credentials if not already present.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-    version_number = request.args.get("version_number")
-    if version_number != version_number2:  # Version number check remains
-        return (
-            jsonify(
-                {"status": "error", "message": "Incorrect version number", "data": None}
-            ),
-            403,
-        )
-    if not username or not password:  # Missing username/password check remains
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):  # Whitelist check remains
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-
-    # Check if credentials are already stored
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-
-    log_scraper_event(f"Starting guc_data scraping for user: {username}")
-    data = scrape_guc_data(username, password)  # Proceed with scraping
-    if data:
-        log_scraper_event(f"Successfully scraped guc_data for user: {username}")
-        return jsonify(data), 200
-    else:
-        log_scraper_event(f"Failed to scrape guc_data for user: {username}")
-        return jsonify({"error": "Failed to fetch GUC data"}), 500
-
-
-@app.route("/api/schedule", methods=["GET"])
-def api_schedule():
-    """
-    Return the user's schedule data.
-    Checks version number, whitelist, validates credentials, and stores credentials if not already present.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-
-    if not username or not password:  # Missing username/password check remains
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):  # Whitelist check remains
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-
-    # Check if credentials are already stored
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    log_scraper_event(f"Starting schedule scraping for user: {username}")
-    data = scrape_schedule(
-        username, password, BASE_SCHEDULE_URL, 3, 2
-    )  # Proceed with scraping
-    if data:
-        log_scraper_event(f"Successfully scraped schedule for user: {username}")
-        return jsonify(data), 200
-    else:
-        log_scraper_event(f"Failed to scrape schedule for user: {username}")
-        return jsonify({"error": "Failed to fetch schedule data"}), 500
-
-
-@app.route("/api/cms_data", methods=["GET"])
-def api_cms_data():
-    """
-    Return CMS courses data.
-    Checks version number, whitelist, and validates the credentials.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-
-    if not username or not password:
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-    if not authenticate_user(username, password):
-        return (
-            jsonify(
-                {"status": "error", "message": "Invalid credentials", "data": None}
-            ),
-            401,
-        )
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    log_scraper_event(f"Starting CMS data scraping for user: {username}")
-    data = cms_scraper(username, password)
-    if data:
-        log_scraper_event(f"Successfully scraped CMS data for user: {username}")
-        return jsonify(data), 200
-    else:
-        log_scraper_event(f"Failed to scrape CMS data for user: {username}")
-        return jsonify([]), 200
-
-
-@app.route("/api/cms_content", methods=["GET", "POST"])
-def api_cms_content():
-    """
-    Return CMS course content data from a specific course URL.
-    Expects a 'course_url' parameter.
-    Checks version number, whitelist, and validates the credentials.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-    course_url = request.args.get("course_url")
-
-    if not username or not password or not course_url:
-        return jsonify({"status": "error", "message": "Missing parameters"}), 400
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-    if not authenticate_user(username, password):
-        return (
-            jsonify(
-                {"status": "error", "message": "Invalid credentials", "data": None}
-            ),
-            401,
-        )
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    log_scraper_event(
-        f"Starting CMS content scraping for user: {username}, URL: {course_url}"
-    )
-    data = cms_scraper(username, password, course_url)
-    if data:
-        log_scraper_event(
-            f"Successfully scraped CMS content for user: {username}, URL: {course_url}"
-        )
-        return jsonify(data), 200
-    else:
-        log_scraper_event(
-            f"Failed to scrape CMS content for user: {username}, URL: {course_url}"
-        )
-        return jsonify([]), 200
-
-
-@app.route("/api/grades", methods=["GET"])
-def api_grades():
-    """
-    Return the user's grades data.
-    Checks version number, whitelist, and validates the credentials.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-
-    if not username or not password:
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-    if not authenticate_user(username, password):
-        return (
-            jsonify(
-                {"status": "error", "message": "Invalid credentials", "data": None}
-            ),
-            401,
-        )
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    log_scraper_event(f"Starting grades scraping for user: {username}")
-    data = scrape_grades(username, password)
-    if data:
-        log_scraper_event(f"Successfully scraped grades for user: {username}")
-        return jsonify(data), 200
-    else:
-        log_scraper_event(f"Failed to scrape grades for user: {username}")
-        return jsonify([]), 200
-
-
-@app.route("/api/attendance", methods=["GET"])
-def api_attendance():
-    """
-    Return the user's attendance data.
-    Checks version number, whitelist, and validates the credentials.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-
-    if not username or not password:
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-    if not authenticate_user(username, password):
-        return (
-            jsonify(
-                {"status": "error", "message": "Invalid credentials", "data": None}
-            ),
-            401,
-        )
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    log_scraper_event(f"Starting attendance scraping for user: {username}")
-    data = scrape_attendance(username, password, BASE_ATTENDANCE_URL, 3, 2)
-    if data:
-        log_scraper_event(f"Successfully scraped attendance for user: {username}")
-        return jsonify(data), 200
-    else:
-        log_scraper_event(f"Failed to scrape attendance for user: {username}")
-        return jsonify({"error": "Failed to fetch attendance data"}), 500
-
-
-@app.route("/api/exam_seats", methods=["GET"])
-def api_exam_seats():
-    """
-    Return the user's exam seats data.
-    Checks version number, whitelist, and validates the credentials.
-    """
-    username = request.args.get("username")
-    password = request.args.get("password")
-
-    if not username or not password:
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
-    if not authenticate_user(username, password):
-        return (
-            jsonify(
-                {"status": "error", "message": "Invalid credentials", "data": None}
-            ),
-            401,
-        )
-    stored_users = get_all_stored_users()
-    if username not in stored_users:  # Check if username exists in stored users
-        if not authenticate_user(username, password):  # Authenticate only if not stored
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-        store_user_credentials(
-            username, password
-        )  # Store credentials if not already stored
-    else:  # If username is already stored, still authenticate (as per original code)
-        if not authenticate_user(username, password):
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    log_scraper_event(f"Starting exam seats scraping for user: {username}")
-    data = scrape_exam_seats(username, password)
-    if data:
-        log_scraper_event(f"Successfully scraped exam seats for user: {username}")
-        return jsonify(data), 200
-    else:
-        log_scraper_event(f"Failed to scrape exam seats for user: {username}")
-        return jsonify([]), 200
-
-
-@app.route("/api/refresh_cache", methods=["POST"])
-def refresh_cache():
-    """
-    Refresh cache in three sections.
-    When called (with the correct secret) and with a query parameter 'section':
-      - Section "1": refreshes GUC data and Schedule data.
-      - Section "2": refreshes CMS data and Grades.
-      - Section "3": refreshes Attendance and Exam Seats.
-    Optionally, if a 'username' parameter is provided, only that user’s data is refreshed.
-    """
-    secret = request.args.get("secret")
-    section = request.args.get("section")
-    if secret != config.CACHE_REFRESH_SECRET:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 403
-    if section not in ["1", "2", "3"]:
-        return (
-            jsonify(
-                {
-                    "status": "error",
-                    "message": "Missing or invalid 'section' parameter. Use '1', '2', or '3'.",
-                }
-            ),
-            400,
-        )
-
-    # Optional: refresh only a specific user's data if 'username' is provided.
-    target_username = request.args.get("username")
-    stored_users = get_all_stored_users()
-    if target_username:
-        if target_username in stored_users:
-            stored_users = {target_username: stored_users[target_username]}
-        else:
-            return jsonify({"status": "error", "message": "Username not found"}), 404
-
-    results = {}
-    for username, cred in stored_users.items():
-        try:
-            # Decrypt the stored credential (cred is a string)
-            password = fernet.decrypt(cred.encode()).decode()
-            user_results = {}
-            if section == "1":
-                user_results["guc_data"] = (
-                    "updated" if scrape_guc_data(username, password) else "failed"
-                )
-                user_results["schedule"] = (
-                    "updated"
-                    if scrape_schedule(username, password, BASE_SCHEDULE_URL, 3, 2)
-                    else "failed"
-                )
-            elif section == "2":
-                user_results["cms_data"] = (
-                    "updated" if cms_scraper(username, password) else "failed"
-                )
-                user_results["grades"] = (
-                    "updated" if scrape_grades(username, password) else "failed"
-                )
-            elif section == "3":
-                user_results["attendance"] = (
-                    "updated"
-                    if scrape_attendance(username, password, BASE_ATTENDANCE_URL, 3, 2)
-                    else "failed"
-                )
-                user_results["exam_seats"] = (
-                    "updated" if scrape_exam_seats(username, password) else "failed"
-                )
-            results[username] = user_results
-        except Exception as e:
-            results[username] = f"error: {str(e)}"
-    return jsonify({"status": "done", "results": results}), 200
-
-
 @app.route("/admin/config", methods=["GET"])
 def admin_config():
     """
@@ -694,8 +164,8 @@ def admin_config():
       - stored_users: A list of usernames for which credentials are stored.
     """
     config_data = {
-        "version_number": version_number2,
-        "whitelist": whitelist,
+        "version_number": get_version_number(),
+        "whitelist": get_whitelist(),
         "stored_users": list(get_all_stored_users().keys()),
         "stored_user_count": len(get_all_stored_users()),  # Added user count
     }
@@ -708,15 +178,12 @@ def admin_view_full_config():
     Return all configuration settings, including those from .env and defaults.
     """
     full_config_data = {
-        "version_number": version_number2,
-        "whitelist": whitelist,
+        "version_number": get_version_number(),
+        "whitelist": get_whitelist(),
         "stored_users": list(get_all_stored_users().keys()),
-        "stored_user_count": len(get_all_stored_users()),  # Added user count here too
-        "base_schedule_url": BASE_SCHEDULE_URL,
-        "base_attendance_url": BASE_ATTENDANCE_URL,
-        # Include sensitive config? Be careful, maybe exclude ENCRYPTION_KEY and CACHE_REFRESH_SECRET
-        # "encryption_key_present": config.ENCRYPTION_KEY is not None,
-        # "cache_refresh_secret_present": config.CACHE_REFRESH_SECRET is not None,
+        "stored_user_count": len(get_all_stored_users()),
+        "base_schedule_url": get_base_schedule_url(),
+        "base_attendance_url": get_base_attendance_url(),
         "redis_connected": redis_client.ping(),  # Basic Redis connection check
     }
     return jsonify(full_config_data), 200
@@ -734,21 +201,6 @@ def admin_update_config():
         return "Both config_key and config_value are required.", 400
     config_key = config_key.upper()
     set_config(config_key, config_value)
-    global whitelist, version_number2, BASE_SCHEDULE_URL, BASE_ATTENDANCE_URL
-    if config_key == "WHITELIST":
-        whitelist = config_value.split(",")
-    elif config_key == "VERSION_NUMBER":
-        version_number2 = config_value
-    elif config_key == "BASE_SCHEDULE_URL_CONFIG":
-        BASE_SCHEDULE_URL = config_value  # Update global variable immediately
-        set_config(
-            "BASE_SCHEDULE_URL_CONFIG", config_value
-        )  # Double set config just in case
-    elif config_key == "BASE_ATTENDANCE_URL_CONFIG":
-        BASE_ATTENDANCE_URL = config_value  # Update global variable immediately
-        set_config(
-            "BASE_ATTENDANCE_URL_CONFIG", config_value
-        )  # Double set config just in case
     return f"Configuration {config_key} updated to {config_value}.", 200
 
 
@@ -757,11 +209,11 @@ def admin_add_whitelist():
     username = request.form.get("username")
     if not username:
         return "Username is required", 400
-    if username in whitelist:
+    current_whitelist = get_whitelist()
+    if username in current_whitelist:
         return f"User {username} is already whitelisted.", 400
-    whitelist.append(username)
-    # Update persistent config
-    set_config("WHITELIST", ",".join(whitelist))
+    new_whitelist = current_whitelist + [username]
+    set_config("WHITELIST", ",".join(new_whitelist))
     return f"User {username} added to whitelist.", 200
 
 
@@ -770,11 +222,11 @@ def admin_remove_whitelist():
     username = request.form.get("username")
     if not username:
         return "Username is required", 400
-    if username not in whitelist:
+    current_whitelist = get_whitelist()
+    if username not in current_whitelist:
         return f"User {username} is not in the whitelist.", 400
-    whitelist.remove(username)
-    # Update persistent config
-    set_config("WHITELIST", ",".join(whitelist))
+    new_whitelist = [user for user in current_whitelist if user != username]
+    set_config("WHITELIST", ",".join(new_whitelist))
     return f"User {username} removed from whitelist.", 200
 
 
@@ -811,12 +263,12 @@ def admin_refresh_user():
                 )
                 user_results["schedule"] = (
                     "updated"
-                    if scrape_schedule(username, password, BASE_SCHEDULE_URL, 3, 2)
+                    if scrape_schedule(
+                        username, password, get_base_schedule_url(), 3, 2
+                    )
                     else "failed"
                 )
             elif action == "clear":
-                # Implement cache clearing if you are using a caching mechanism.
-                # For now, just indicate it's a 'clear' action. In a real cache system, you would remove keys.
                 user_results["guc_data"] = "cache cleared"
                 user_results["schedule"] = "cache cleared"
         elif section == "2":
@@ -834,7 +286,9 @@ def admin_refresh_user():
             if action == "refresh":
                 user_results["attendance"] = (
                     "updated"
-                    if scrape_attendance(username, password, BASE_ATTENDANCE_URL, 3, 2)
+                    if scrape_attendance(
+                        username, password, get_base_attendance_url(), 3, 2
+                    )
                     else "failed"
                 )
                 user_results["exam_seats"] = (
@@ -880,7 +334,9 @@ def admin_refresh_all():
                     )
                     user_results["schedule"] = (
                         "updated"
-                        if scrape_schedule(username, password, BASE_SCHEDULE_URL, 3, 2)
+                        if scrape_schedule(
+                            username, password, get_base_schedule_url(), 3, 2
+                        )
                         else "failed"
                     )
                 elif action == "clear":
@@ -902,7 +358,7 @@ def admin_refresh_all():
                     user_results["attendance"] = (
                         "updated"
                         if scrape_attendance(
-                            username, password, BASE_ATTENDANCE_URL, 3, 2
+                            username, password, get_base_attendance_url(), 3, 2
                         )
                         else "failed"
                     )
@@ -1044,6 +500,7 @@ def admin_restart():
 
 @app.route("/debug/whitelist", methods=["GET"])
 def debug_whitelist():
+    whitelist = get_whitelist()
     return jsonify({"whitelist": whitelist})
 
 
