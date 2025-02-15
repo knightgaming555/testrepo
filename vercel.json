@@ -9,6 +9,7 @@
     { "src": "api/grades.py", "use": "@vercel/python" },
     { "src": "api/attendance.py", "use": "@vercel/python" },
     { "src": "api/exam_seats.py", "use": "@vercel/python" },
+    { "src": "api/refresh_cache.py", "use": "@vercel/python" },
     { "src": "api/app.py", "use": "@vercel/python" }
     
   ],
@@ -21,6 +22,7 @@
     { "src": "/api/grades", "dest": "api/grades.py" },
     { "src": "/api/attendance", "dest": "api/attendance.py" },
     { "src": "/api/exam_seats", "dest": "api/exam_seats.py" },
+    { "src": "/api/refresh_cache", "dest": "api/refresh_cache.py" },
     {  "src": "/(.*)", "dest": "api/app.py" }
     
   ]
