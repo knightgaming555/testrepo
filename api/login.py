@@ -32,30 +32,9 @@ redis_client = redis.from_url(os.environ.get("REDIS_URL"))
 fernet = Fernet(config.ENCRYPTION_KEY)
 
 
-def get_all_stored_users():
-    stored = redis_client.hgetall("user_credentials")
-    return {k.decode(): v.decode() for k, v in stored.items()}
-
-
-def store_user_credentials(username, password):
-    encrypted = fernet.encrypt(password.encode()).decode()
-    redis_client.hset("user_credentials", username, encrypted)
-
-
 def log_event(message):
     print(f"{datetime.now().isoformat()} - {message}")
 
-
-def is_user_authorized(username):
-    whitelist_raw = redis_client.get("WHITELIST")
-    if whitelist_raw:
-        whitelist = [u.strip() for u in whitelist_raw.decode().split(",")]
-        return username in whitelist
-    return False
-
-
-version_number_raw = redis_client.get("VERSION_NUMBER")
-version_number2 = version_number_raw.decode() if version_number_raw else "1.0"
 
 # --- Flask App ---
 app = Flask(__name__)
@@ -66,6 +45,20 @@ def api_login():
     data = request.get_json()
     username = data.get("username")
     password = data.get("password")
+
+    def store_user_credentials(username, password):
+        encrypted = fernet.encrypt(password.encode()).decode()
+        redis_client.hset("user_credentials", username, encrypted)
+
+    def is_user_authorized(username):
+        whitelist_raw = redis_client.get("WHITELIST")
+        if whitelist_raw:
+            whitelist = [u.strip() for u in whitelist_raw.decode().split(",")]
+            return username in whitelist
+        return False
+
+    version_number_raw = redis_client.get("VERSION_NUMBER")
+    version_number2 = version_number_raw.decode() if version_number_raw else "1.0"
     req_version = request.args.get("version_number")
     if req_version != version_number2:
         return (
