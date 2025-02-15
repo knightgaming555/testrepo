@@ -57,8 +57,7 @@ def is_user_authorized(username):
 
 
 # Retrieve version number (default "1.0")
-version_number_raw = redis_client.get("VERSION_NUMBER")
-version_number2 = version_number_raw.decode() if version_number_raw else "1.0"
+
 
 # --- Flask App and Endpoint ---
 app = Flask(__name__)
@@ -69,6 +68,8 @@ def api_guc_data():
     username = request.args.get("username")
     password = request.args.get("password")
     req_version = request.args.get("version_number")
+    version_number_raw = redis_client.get("VERSION_NUMBER")
+    version_number2 = version_number_raw.decode() if version_number_raw else "1.0"
 
     if req_version != version_number2:
         return (
