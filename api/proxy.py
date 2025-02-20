@@ -5,7 +5,7 @@ from requests_ntlm import HttpNtlmAuth
 app = Flask(__name__)
 
 
-@app.route("/api/download_file", methods=["GET"])
+@app.route("/api/proxy", methods=["GET"])
 def download_file():
     # Retrieve query parameters.
     username = request.args.get("username")
