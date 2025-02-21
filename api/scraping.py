@@ -932,3 +932,65 @@ def scrape_exam_seats(username, password, max_retries=3, retry_delay=2):
                 return seats_data
         print(f"Attempt {attempt+1} for exam seats failed.")
     return None
+
+
+def scrape_course_announcements(
+    username, password, course_url, max_retries=3, retry_delay=2
+):
+    """
+    Scrapes announcements from a specific GUC CMS course page.
+
+    Args:
+        username (str): GUC username.
+        password (str): GUC password.
+        course_url (str): URL of the specific course page.
+        max_retries (int): Maximum number of retries for network requests.
+        retry_delay (int): Delay in seconds between retries.
+
+    Returns:
+        dict or None: A dictionary containing the announcement content as HTML,
+                     or None if scraping fails.
+    """
+    session = requests.Session()
+    session.auth = HttpNtlmAuth(username, password)
+
+    try:
+        print(f"Fetching course page for announcements from: {course_url}")
+        response = make_request(
+            session,
+            course_url,
+            method="GET",
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            timeout=10,
+        )
+        if not response:
+            print(f"Failed to fetch course page for announcements from: {course_url}")
+            return None
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        announcement_div = soup.find(
+            "div", id="ContentPlaceHolderright_ContentPlaceHoldercontent_desc"
+        )
+
+        if announcement_div:
+            announcements_html_content = (
+                announcement_div.decode_contents()
+            )  # Get inner HTML
+
+            announcement_data = {
+                "course_url": course_url,
+                "announcements_html": str(
+                    announcements_html_content
+                ),  # Ensure it's a string for JSON compatibility
+            }
+            print(f"Successfully scraped announcements from: {course_url}")
+            return announcement_data
+        else:
+            print(f"Announcement section not found on course page: {course_url}")
+            return {"course_url": course_url, "error": "Announcement section not found"}
+
+    except Exception as e:
+        error_message = f"Error scraping course announcements from {course_url}: {e}"
+        print(error_message)
+        return {"course_url": course_url, "error": error_message}

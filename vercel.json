@@ -11,6 +11,7 @@
     { "src": "api/exam_seats.py", "use": "@vercel/python" },
     { "src": "api/refresh_cache.py", "use": "@vercel/python" },
     { "src": "api/proxy.py", "use": "@vercel/python" },
+    { "src": "api/announcements.py", "use": "@vercel/python" },
     { "src": "api/app.py", "use": "@vercel/python" }
     
   ],
@@ -25,6 +26,7 @@
     { "src": "/api/exam_seats", "dest": "api/exam_seats.py" },
     { "src": "/api/refresh_cache", "dest": "api/refresh_cache.py" },
     { "src": "/api/proxy", "dest": "api/proxy.py" },
+    { "src": "/api/announcements", "dest": "api/announcements.py" },
     {  "src": "/(.*)", "dest": "api/app.py" }
     
   ]
