@@ -30,7 +30,8 @@ BASE_URL = "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx"
 # Suppress only the InsecureRequestWarning from urllib3
 warnings.simplefilter("ignore", InsecureRequestWarning)
 
-# --- Cache Utilities (Disabled for schedule data) ---
+# --- Cache Utilities ---
+# LONG_CACHE_TIMEOUT is set for around 2 months in seconds.
 LONG_CACHE_TIMEOUT = 5184000  # 2 months in seconds
 
 
@@ -178,7 +179,9 @@ def parse_schedule_bs4(html):
 
 def scrape_schedule(username, password, base_url):
     """Scrapes schedule data with NTLM authentication and JavaScript redirection.
-    Caching is temporarily disabled so that every request fetches fresh data."""
+    Caching is now applied in the API endpoint so that a fresh fetch is only done
+    when no cached version exists.
+    """
     try:
         with requests.Session() as session:
             session.auth = HttpNtlmAuth(username, password)
@@ -197,7 +200,6 @@ def scrape_schedule(username, password, base_url):
             v_parameter_value = js_match.group(1)
             schedule_url = f"{base_url}?v={v_parameter_value}"
             schedule_res = session.get(schedule_url, timeout=10, verify=False)
-            # Removed file-writing to keep this function dynamic.
             scraped = parse_schedule_bs4(schedule_res.text)
             return (scraped, perf_counter() - start)
     except Exception as e:
@@ -270,8 +272,15 @@ def api_schedule():
         store_user_credentials(username, password)
 
     log_event = lambda msg: print(f"{datetime.now().isoformat()} - {msg}")
-    log_event(f"Starting schedule scraping for user: {username}")
 
+    # --- Caching Logic for Schedule Data ---
+    cache_key = f"schedule:{username}"
+    cached_data = get_from_app_cache(cache_key)
+    if cached_data:
+        log_event(f"Serving schedule data from cache for user: {username}")
+        return jsonify(cached_data), 200
+
+    log_event(f"Starting schedule scraping for user: {username}")
     result, elapsed = scrape_schedule(username, password, BASE_URL)
     if "error" in result:
         log_event(f"Error: {result['error']}")
@@ -281,6 +290,8 @@ def api_schedule():
             f"Successfully scraped schedule for user: {username} in {elapsed:.3f}s"
         )
         filtered = filter_schedule_details(result)
+        # Cache the filtered schedule for about 2 months
+        set_to_app_cache(cache_key, filtered, LONG_CACHE_TIMEOUT)
         return jsonify(filtered), 200
 
 
