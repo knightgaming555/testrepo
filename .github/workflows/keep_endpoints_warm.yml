@@ -1,0 +1,34 @@
+name: Keep Endpoints Warm
+
+on:
+  schedule:
+    - cron: "*/5 * * * *" # runs every 5 minutes
+  workflow_dispatch: # Allows you to trigger it manually
+
+jobs:
+  keep-warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping all endpoints
+        run: |
+          # Define the base URL for your API (adjust as needed)
+          BASE_URL="https://v2-guc-scrapper.vercel.app/api"
+          # List of endpoints to ping
+          endpoints=(
+            "announcements"
+            "attendance"
+            "cms_content"
+            "cms_data"
+            "exam_seats"
+            "grades"
+            "guc_data"
+            "login"
+            "proxy"
+            "schedule"
+            "refresh_cache"
+          )
+          for endpoint in "${endpoints[@]}"; do
+            echo "Pinging ${BASE_URL}/${endpoint}"
+            # Ping the endpoint; ignore output and errors
+            curl --max-time 10 --silent --output /dev/null "${BASE_URL}/${endpoint}" || true
+          done
