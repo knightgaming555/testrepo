@@ -177,9 +177,8 @@ def parse_schedule_bs4(html):
 
 
 def scrape_schedule(username, password, base_url):
-    """Schedule scraper adapted for JavaScript redirection and BeautifulSoup parsing.
+    """Scrapes schedule data with NTLM authentication and JavaScript redirection.
     Caching is temporarily disabled so that every request fetches fresh data."""
-    # Caching disabled: get_from_app_cache and set_to_app_cache are not used.
     try:
         with requests.Session() as session:
             session.auth = HttpNtlmAuth(username, password)
@@ -198,9 +197,7 @@ def scrape_schedule(username, password, base_url):
             v_parameter_value = js_match.group(1)
             schedule_url = f"{base_url}?v={v_parameter_value}"
             schedule_res = session.get(schedule_url, timeout=10, verify=False)
-            with open("schedule_page_content_bs4.html", "w", encoding="utf-8") as f:
-                f.write(schedule_res.text)
-            print("Schedule page HTML saved to schedule_page_content_bs4.html")
+            # Removed file-writing to keep this function dynamic.
             scraped = parse_schedule_bs4(schedule_res.text)
             return (scraped, perf_counter() - start)
     except Exception as e:
@@ -260,7 +257,7 @@ def api_schedule():
     if not is_user_authorized(username):
         return jsonify({"error": "User is not authorized"}), 403
 
-    # Check stored credentials; if not present, store them (no extra external auth)
+    # Check stored credentials; if not present, store them
     stored_users = get_all_stored_users()
     if username in stored_users:
         try:
@@ -284,7 +281,6 @@ def api_schedule():
             f"Successfully scraped schedule for user: {username} in {elapsed:.3f}s"
         )
         filtered = filter_schedule_details(result)
-        # Return exactly the schedule dictionary (no extra outer keys)
         return jsonify(filtered), 200
 
 

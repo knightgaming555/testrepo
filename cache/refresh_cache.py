@@ -140,7 +140,7 @@ def refresh_cache():
             # Cache for 10 minutes (600 seconds)
             redis_client.setex(
                 cache_key,
-                600,
+                900,
                 json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
             )
             print(
