@@ -7,5 +7,5 @@ requests_ntlm
 beautifulsoup4
 selectolax
 lxml
-Redis
-
+redis
+pycurl
