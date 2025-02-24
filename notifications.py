@@ -51,10 +51,10 @@ def test_announcements_api():
     Fetches the announcements from the API endpoint, extracts and sorts them,
     and then prints the refined announcement texts.
     """
-    url = "http://127.0.0.1:5000/api/announcements"
+    url = "https://v2-guc-scrapper.vercel.app/api/announcements"
     params = {
-        "username": "mohamed.elsaadi",
-        "password": "Messo@1245",
+        "username": "Your user",
+        "password": "Your pass",
         "course_url": "https://cms.guc.edu.eg/apps/student/CourseViewStn.aspx?id=2&sid=64",
     }
 

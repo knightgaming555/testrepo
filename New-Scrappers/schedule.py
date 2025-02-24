@@ -1,59 +1,17 @@
 import re
-import json
 import requests
 from requests_ntlm import HttpNtlmAuth
 from time import perf_counter
 from bs4 import BeautifulSoup
 import warnings
 from urllib3.exceptions import InsecureRequestWarning
-from flask import Flask, request, jsonify
-from datetime import datetime
-import redis
-from cryptography.fernet import Fernet
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Initialize Redis and encryption key (for storing credentials and whitelist)
-REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-redis_client = redis.from_url(REDIS_URL)
-ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    raise ValueError("ENCRYPTION_KEY environment variable not set")
-fernet = Fernet(ENCRYPTION_KEY)
-
-# Base URL for schedule scraping
-BASE_URL = "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx"
 
 # Suppress only the InsecureRequestWarning from urllib3
 warnings.simplefilter("ignore", InsecureRequestWarning)
 
-# --- Cache Utilities (Disabled for schedule data) ---
-LONG_CACHE_TIMEOUT = 5184000  # 2 months in seconds
 
-
-def get_from_app_cache(key):
-    try:
-        cached = redis_client.get(key)
-        if cached:
-            return json.loads(cached)
-    except Exception as e:
-        print(f"[Cache] Get error for key '{key}': {e}")
-    return None
-
-
-def set_to_app_cache(key, value, timeout=LONG_CACHE_TIMEOUT):
-    try:
-        redis_client.setex(key, timeout, json.dumps(value))
-    except Exception as e:
-        print(f"[Cache] Set error for key '{key}': {e}")
-
-
-# --- Fast Scraping Functions ---
 def extract_schedule_data(cell_html):
-    """Extracts schedule data from a single table cell HTML using BeautifulSoup."""
+    """Extracts schedule data from a single table cell HTML using BeautifulSoup (based on user's logic)."""
     soup = BeautifulSoup(cell_html, "lxml")
     course_info = {"Type": "Unknown", "Location": "Unknown", "Course_Name": "Unknown"}
     try:
@@ -135,7 +93,7 @@ def extract_schedule_data(cell_html):
 
 
 def parse_schedule_bs4(html):
-    """Parses the schedule HTML using BeautifulSoup and CSS selectors."""
+    """Parses the schedule HTML using BeautifulSoup and CSS selectors (based on user's logic)."""
     soup = BeautifulSoup(html, "lxml")
     schedule = {}
     rows = soup.select(
@@ -169,6 +127,7 @@ def parse_schedule_bs4(html):
             schedule[day] = day_schedule
         except Exception as e:
             print(f"Error getting schedule: {e}")
+
     day_order = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]
     sorted_schedule = {
         day: schedule.get(day, {}) for day in day_order if day in schedule
@@ -177,32 +136,38 @@ def parse_schedule_bs4(html):
 
 
 def scrape_schedule(username, password, base_url):
-    """Schedule scraper adapted for JavaScript redirection and BeautifulSoup parsing.
-    Caching is temporarily disabled so that every request fetches fresh data."""
-    # Caching disabled: get_from_app_cache and set_to_app_cache are not used.
+    """Schedule scraper adapted for JavaScript redirection and BeautifulSoup parsing."""
     try:
         with requests.Session() as session:
             session.auth = HttpNtlmAuth(username, password)
+
             start = perf_counter()
             res = session.get(base_url, timeout=10, verify=False)
+
             if res.status_code != 200:
-                return {
-                    "error": f"Initial request failed ({res.status_code})"
-                }, perf_counter() - start
+                return {"error": f"Initial request failed ({res.status_code})"}, 0
+
             js_redirect_pattern = re.compile(r"sTo\('([a-f0-9-]+)'\)", re.IGNORECASE)
             js_match = js_redirect_pattern.search(res.text)
+
             if not js_match:
                 return {
                     "error": "Failed to find JavaScript redirect parameter 'v'"
                 }, perf_counter() - start
+
             v_parameter_value = js_match.group(1)
             schedule_url = f"{base_url}?v={v_parameter_value}"
             schedule_res = session.get(schedule_url, timeout=10, verify=False)
+
             with open("schedule_page_content_bs4.html", "w", encoding="utf-8") as f:
                 f.write(schedule_res.text)
             print("Schedule page HTML saved to schedule_page_content_bs4.html")
-            scraped = parse_schedule_bs4(schedule_res.text)
-            return (scraped, perf_counter() - start)
+
+            return (
+                parse_schedule_bs4(schedule_res.text),
+                perf_counter() - start,
+            )  # Use the new BS4 parser!
+
     except Exception as e:
         return {"error": str(e)}, perf_counter() - start
 
@@ -221,72 +186,42 @@ def filter_schedule_details(schedule_data):
                 }
             else:
                 filtered_periods[period_name] = period_details
+
         filtered_schedule[day] = filtered_periods
     return filtered_schedule
 
 
-# --- Whitelist and Credential Storage ---
-def get_all_stored_users():
-    stored = redis_client.hgetall("user_credentials")
-    return {k.decode(): v.decode() for k, v in stored.items()}
-
-
-def store_user_credentials(username, password):
-    encrypted = fernet.encrypt(password.encode()).decode()
-    redis_client.hset("user_credentials", username, encrypted)
-
-
-def is_user_authorized(username):
-    whitelist_raw = redis_client.get("WHITELIST")
-    if whitelist_raw:
-        whitelist = [u.strip() for u in whitelist_raw.decode().split(",")]
-        return username in whitelist
-    return False
-
-
-# --- Flask API Setup ---
-app = Flask(__name__)
-
-
-@app.route("/api/schedule", methods=["GET"])
-def api_schedule():
-    # Extract username and password from query parameters
-    username = request.args.get("username")
-    password = request.args.get("password")
-    if not username or not password:
-        return jsonify({"error": "Missing username or password"}), 400
-
-    # Whitelist check
-    if not is_user_authorized(username):
-        return jsonify({"error": "User is not authorized"}), 403
-
-    # Check stored credentials; if not present, store them (no extra external auth)
-    stored_users = get_all_stored_users()
-    if username in stored_users:
-        try:
-            stored_pw = fernet.decrypt(stored_users[username].encode()).decode().strip()
-        except Exception:
-            return jsonify({"error": "Error decrypting credentials"}), 500
-        if stored_pw != password.strip():
-            return jsonify({"error": "Invalid credentials"}), 401
-    else:
-        store_user_credentials(username, password)
-
-    log_event = lambda msg: print(f"{datetime.now().isoformat()} - {msg}")
-    log_event(f"Starting schedule scraping for user: {username}")
-
-    result, elapsed = scrape_schedule(username, password, BASE_URL)
-    if "error" in result:
-        log_event(f"Error: {result['error']}")
-        return jsonify({"error": result["error"]}), 500
-    else:
-        log_event(
-            f"Successfully scraped schedule for user: {username} in {elapsed:.3f}s"
-        )
-        filtered = filter_schedule_details(result)
-        # Return exactly the schedule dictionary (no extra outer keys)
-        return jsonify(filtered), 200
-
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    USERNAME = "mohamed.elsaadi"
+    PASSWORD = "Messo@1245"
+    BASE_URL = "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx"
+
+    print(
+        "Fetching schedule with BeautifulSoup parser (NO CACHE) ..."
+    )  # Updated print statement
+
+    result, elapsed = scrape_schedule(
+        USERNAME, PASSWORD, BASE_URL
+    )  # No cache parameters
+
+    if "error" in result:
+        print(f"Error: {result['error']}")
+    else:
+        print(
+            f"\nSchedule fetched in {elapsed:.3f}s using BeautifulSoup (NO CACHE)"
+        )  # Updated print statement
+
+        # full_schedule = result # Commenting out full schedule for cleaner output
+        filtered_schedule = filter_schedule_details(result)
+
+        # print("\nFull Parsed Schedule Data (BeautifulSoup Parser):") # Commenting out full schedule for cleaner output
+        # for day, periods in full_schedule.items(): # Commenting out full schedule for cleaner output
+        #     print(f"\n--- {day} ---") # Commenting out full schedule for cleaner output
+        #     for period, details in periods.items(): # Commenting out full schedule for cleaner output
+        #         print(f"{period}: {details}") # Commenting out full schedule for cleaner output
+
+        print("\nFiltered Schedule (Course, Type, Location, BeautifulSoup Parser):")
+        for day, periods in filtered_schedule.items():
+            print(f"\n--- {day} ---")
+            for period, details in periods.items():
+                print(f"{period}: {details}")

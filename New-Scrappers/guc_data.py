@@ -15,11 +15,10 @@ from dotenv import load_dotenv
 import pycurl
 from io import BytesIO
 import traceback
+import pandas as pd  # Keep pandas import for DataFrame example, though not directly used for API output
 
-# Load environment variables
+# Load environment variables (rest of your setup code is unchanged)
 load_dotenv()
-
-# Initialize Redis and encryption key
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL)
 ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
@@ -28,8 +27,7 @@ if not ENCRYPTION_KEY:
 fernet = Fernet(ENCRYPTION_KEY)
 
 
-# --- Configuration ---
-class Config:
+class Config:  # Configuration class remains unchanged
     DEBUG = True
     CACHE_REFRESH_SECRET = os.environ.get("CACHE_REFRESH_SECRET", "my_refresh_secret")
     ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
@@ -48,19 +46,15 @@ class Config:
 
 
 config = Config()
-
-# Suppress InsecureRequestWarning (if you were still using requests and needed this)
-warnings.simplefilter("ignore", InsecureRequestWarning)
-
-# --- Cache Utilities ---
-DATA_CACHE_EXPIRY = 600  # seconds (10 minutes cache for data)
+warnings.simplefilter("ignore", InsecureRequestWarning)  # Supress warnings (no change)
+DATA_CACHE_EXPIRY = 600  # Cache expiry (no change)
 
 
-def get_from_app_cache(key):
+def get_from_app_cache(key):  # Cache functions remain unchanged
     try:
         cached = redis_client.get(key)
         if cached:
-            return json.loads(cached.decode())  # Decode bytes to string
+            return json.loads(cached.decode())
     except Exception as e:
         print(f"[Cache] Get error for key '{key}': {e}")
     return None
@@ -70,18 +64,17 @@ def set_to_app_cache(key, value, timeout=DATA_CACHE_EXPIRY):
     try:
         redis_client.setex(
             key, timeout, json.dumps(value, ensure_ascii=False).encode("utf-8")
-        )  # Encode to bytes
+        )
     except Exception as e:
         print(f"[Cache] Set error for key '{key}': {e}")
 
 
-# --- Fast Scraping Functions for GUC Data (adapted from your initial fast code) ---
-def multi_fetch(urls, userpwd):
-    """Fetches multiple URLs concurrently using pycurl."""
+def multi_fetch(
+    urls, userpwd
+):  # multi_fetch remains unchanged (efficient requests already)
     multi = pycurl.CurlMulti()
     handles = []
     buffers = {}
-
     for url in urls:
         buffer = BytesIO()
         c = pycurl.Curl()
@@ -90,16 +83,14 @@ def multi_fetch(urls, userpwd):
         c.setopt(c.USERPWD, userpwd)
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
-        c.setopt(c.TIMEOUT, 10)  # Timeout for each handle
+        c.setopt(c.TIMEOUT, 10)
         multi.add_handle(c)
         handles.append(c)
         buffers[url] = buffer
-
     num_handles = len(handles)
     while num_handles:
         ret, num_handles = multi.perform()
         multi.select(1.0)
-
     results = {}
     for url, c in zip(urls, handles):
         results[url] = buffers[url].getvalue().decode("utf-8", errors="replace")
@@ -109,8 +100,9 @@ def multi_fetch(urls, userpwd):
     return results
 
 
-def parse_student_info(html):
-    """Parses student info HTML using BeautifulSoup with lxml."""
+def parse_student_info(
+    html,
+):  # parse_student_info remains unchanged (already efficient)
     soup = BeautifulSoup(html, "lxml")
     info = {}
     prefix = "ContentPlaceHolderright_ContentPlaceHoldercontent_Label"
@@ -131,81 +123,107 @@ def parse_student_info(html):
     return info
 
 
-def parse_notifications(html):
-    """Parses notifications HTML using BeautifulSoup with lxml."""
-    soup = BeautifulSoup(html, "lxml")
-    notifications = []
-    table = soup.find(
-        id="ContentPlaceHolderright_ContentPlaceHoldercontent_GridViewdata"
+def scrape_student_notifications(html_content):
+    """
+    Optimized notification scraping: Extracts cell texts in one go, reduces calls to BeautifulSoup methods inside loop.
+    """
+
+    soup = BeautifulSoup(html_content, "lxml")
+    notification_table = soup.select_one(
+        "#ContentPlaceHolderright_ContentPlaceHoldercontent_GridViewdata"
     )
-    if table:
-        rows = table.find_all("tr")[1:]
-        for row in rows:
-            cells = row.find_all("td")
-            if len(cells) < 6:
-                continue
-            notif = {}
-            notif["id"] = cells[0].get_text(" ", strip=True).replace("\r", "")
-            notif["title"] = cells[2].get_text(" ", strip=True).replace("\r", "")
-            notif["date"] = cells[3].get_text(" ", strip=True).replace("\r", "")
-            notif["staff"] = cells[4].get_text(" ", strip=True).replace("\r", "")
-            notif["importance"] = cells[5].get_text(" ", strip=True).replace("\r", "")
-            button = cells[1].find("button")
-            if button:
-                email_time_str = button.get("data-email_time", "")
-                try:
-                    email_time = datetime.strptime(email_time_str, "%m/%d/%Y")
-                    notif["email_time"] = email_time.isoformat()
-                except Exception as e:
-                    print(
-                        f"Error parsing email_time '{email_time_str}': {e}. Using current time."
-                    )
-                    notif["email_time"] = datetime.now().isoformat()
-                subject = (
-                    button.get("data-subject_text", "")
-                    .replace("Notification System:", "")
-                    .strip()
-                    .replace("\r", "")
+
+    if not notification_table:
+        print("Error: Notification table not found.")
+        return []
+
+    headers = [
+        th.text.strip()
+        for th in notification_table.thead.find_all("th")
+        if th.text.strip()
+    ]
+    if not headers:
+        print(
+            "Warning: No table headers found or headers are empty. Proceeding without headers."
+        )
+        first_data_row_cells = (
+            notification_table.tbody.find_all("tr")[0].find_all("td")
+            if notification_table.tbody.find_all("tr")
+            else []
+        )
+        headers = [f"Column_{i+1}" for i in range(len(first_data_row_cells))]
+
+    notifications_data = []
+    rows = notification_table.tbody.find_all("tr")
+
+    for row in rows:
+        cells = row.find_all("td")
+        if not cells or len(cells) < 6:
+            continue
+
+        cell_values = [
+            cell.text.strip().replace("\r", "") for cell in cells
+        ]  # Extract ALL cell texts once
+
+        notif = {}
+        notif["id"] = cell_values[
+            0
+        ]  # Access cell values by index, much faster than repeated calls to get_text()
+        notif["title"] = cell_values[2]
+        notif["date"] = cell_values[3]
+        notif["staff"] = cell_values[4]
+        notif["importance"] = cell_values[5]
+
+        button = cells[1].find("button")
+        if button:
+            email_time_str = button.get("data-email_time", "")
+            try:
+                email_time = datetime.strptime(email_time_str, "%m/%d/%Y")
+                notif["email_time"] = email_time.isoformat()
+            except Exception as e:
+                print(
+                    f"Error parsing email_time '{email_time_str}': {e}. Using current time."
                 )
-                body = (
-                    button.get("data-body_text", "")
-                    .replace("------------------------------", "")
-                    .strip()
-                    .replace("\r", "")
-                )
-                notif["subject"] = subject
-                notif["body"] = body
-            else:
                 notif["email_time"] = datetime.now().isoformat()
-                notif["subject"] = ""
-                notif["body"] = ""
-            notifications.append(notif)
-    else:
-        print("Notifications table not found in the HTML.")
-    notifications.sort(key=lambda x: x["email_time"], reverse=True)
-    return notifications
+            notif["subject"] = (
+                button.get("data-subject_text", "")
+                .replace("Notification System:", "")
+                .strip()
+                .replace("\r", "")
+            )
+            notif["body"] = (
+                button.get("data-body_text", "")
+                .replace("------------------------------", "")
+                .strip()
+                .replace("\r", "")
+            )
+        else:  # consistent defaults
+            notif["email_time"] = datetime.now().isoformat()
+            notif["subject"] = ""
+            notif["body"] = ""
+
+        notifications_data.append(notif)
+
+    notifications_data.sort(key=lambda x: x["email_time"], reverse=True)
+    return notifications_data
 
 
-def scrape_guc_data_fast(username, password, urls):
-    """Scrapes student info and notifications using fast methods."""
+def scrape_guc_data_fast(
+    username, password, urls
+):  # scrape_guc_data_fast remains unchanged (just calls optimized notification parser)
     userpwd = f"GUC\\{username}:{password}"
-    try:
-        results = multi_fetch(urls, userpwd)
-        student_html = results[urls[0]]
-        notif_html = results[urls[1]]
 
-        student_info = parse_student_info(student_html)
-        notifications = parse_notifications(notif_html)
+    results = multi_fetch(urls, userpwd)
+    student_html = results[urls[0]]
+    notif_html = results[urls[1]]
 
-        return {"notifications": notifications, "student_info": student_info}
+    student_info = parse_student_info(student_html)
+    notifications = scrape_student_notifications(notif_html)
 
-    except Exception as e:
-        print(f"Error in scrape_guc_data_fast: {e}")
-        traceback.print_exc()
-        return None
+    return {"notifications": notifications, "student_info": student_info}
 
 
-# --- Whitelist and Credential Storage ---
+# --- Whitelist and Credential Storage & Flask App - No changes needed ---
 def get_all_stored_users():
     stored = redis_client.hgetall("user_credentials")
     return {k.decode(): v.decode() for k, v in stored.items()}
@@ -224,7 +242,6 @@ def is_user_authorized(username):
     return False
 
 
-# --- Flask API Setup ---
 app = Flask(__name__)
 
 

@@ -1,0 +1,1479 @@
+
+
+<!DOCTYPE html>
+
+<html>
+<head><title>
+	Student Portal SIS
+</title><meta charset="utf-8" /><meta http-equiv="X-UA-Compatible" content="IE=edge" /><meta http-equiv="Content-Language" content="en" /><meta http-equiv="Content-Type" content="text/html; charset=utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" /><meta name="description" content="This is an example dashboard created using build-in elements and components." /><meta name="msapplication-tap-highlight" content="no" /><link href="/CSS/architectui-html-pro-1.4.0/main.87c0748b313a1dda75f5.css" rel="stylesheet" />
+   
+
+    <style>
+        .app-header__logo .logo-src {
+            background: url(/CSS/architectui-html-pro-1.4.0/assets/images/guc_logo_og.png);
+            background-repeat: no-repeat;
+            width: 118px;
+            height: 50px;
+        }
+
+        .app-sidebar {
+            background-image: linear-gradient(to right,    	 #00665c,  	 #00665c ) !important;
+        }
+
+        .hamburger-inner, .hamburger-inner::before, .hamburger-inner::after{
+            background-color: #00665c !important;
+        }
+
+        .main-menu {
+            color: rgba(255,255,255,0.7) !important;
+        }
+
+            .main-menu:hover {
+                background: rgba(255,255,255,0.15) !important;
+                color: #fff !important;
+            }
+
+        .vertical-nav-menu ul > li > a.mm-active {
+            color: #fff;
+            background: rgba(255,255,255,0.15);
+            font-weight: normal;
+        }
+
+        .vertical-nav-menu ul > li > a:hover {
+            background: rgba(255,255,255,0.15) !important;
+            color: #fff !important;
+        }
+    </style>
+    <style>
+        .datepicker-container.datepicker-dropdown.datepicker-top-left {
+            z-index: 1500 !important;
+        }
+    </style>
+    <style>
+        .modalx {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 100%;
+            background: rgba( 255, 255, 255, .7 )
+            /*url('http://i.stack.imgur.com/FhHRx.gif')*/
+            50% 50% no-repeat;
+        }
+
+        /* When the body has the loading class, we turn
+               the scrollbar off with overflow:hidden */
+        body.loading .modalx {
+            overflow: hidden;
+        }
+
+        /* Anytime the body has the loading class, our
+               modal element will be visible */
+        body.loading .modalx {
+            display: block;
+        }
+    </style>
+    <style>
+        .app-header__content {
+            height: 90px !important;
+        }
+          .vertical-nav-menu ul > li > a {
+                color: white !important;
+            }
+    </style>
+    
+    
+    
+
+    <style>
+        .icon_application-form {
+                background-image: url('/CSS/Icons/icons8-list-30.png');
+                height: 30px !important;
+                width: 30px !important;
+                display: block;
+                    background-repeat: no-repeat;
+                /* Other styles here */
+            }
+         .icon_double-down {
+                background: url('/CSS/Icons/icons8-collapse-arrow-35.png');
+                /*height: 25px !important;
+                width: 25px !important;*/
+                display: block;
+                background-repeat: no-repeat;
+                opacity:0.7;
+                /* Other styles here */
+            }
+
+          .icon_terms-and-conditions {
+                background: url('/CSS/Icons/terms-and-conditions.png');
+                height: 40px;
+                width: 40px;
+                display: block;
+                background-repeat: no-repeat;
+                opacity:0.7;
+                /* Other styles here */
+            }
+
+          .vertical-nav-menu i.metismenu-state-icon{
+                  height: 50%;
+          }
+
+    </style>
+</head>
+<body>
+    <form method="post" action="./GroupSchedule.aspx?v=1e6d6a2d-a9c4-436a-83e5-60ffcdeaa3bc" id="form1">
+<input type="hidden" name="__VIEWSTATE" id="__VIEWSTATE" value="8IOTch4RF1Ph0D9IkRgHHwPw6yOR8e9ToN9pHrkDHPDYBDgCri6CI7hJPH6K9QZSufzsagB0odp4qXP9hNQ6ho7vRHXN9e5hz1Wh2T2vOD4ur18VkYvoWNCBiksVOnjesUBOjcvYeNxyrI+jkpAigGNVpJS+SD708WAW23rda8xXfEUC6sfkmTLc05AMcTzgLfL/Pbf93Mfmi7OsOl09eS+f/vNebC22tmz0SvkWqa2L/KcjpNYyNPztadAeiXvc/Xemx4mmvmcY3nZRUg/Qoh4/jGp73QStYMQra7yj74X/A0YgkoOKOqARYB5bBp2KyqYlvebE4JYPVhR/rWo+IdziGPo6lOqqQyBdOn7dHQNotWjBnbe+QdmPMOuXTeAEqXnAsZlAjUYHUAYN5zEFXHqRBAp7uZFTZaneKOsQeDfEBJ3NeUM+U60pXo2IJzmddS5GMWMbMgl5VFmuE8Eo9QfuDdfQwa+yPNBMbF8dMrnnvgY7VL5sk4AgDCazpD4XdHOUdsm5irbDlyqc7ELXY6Gc6HUHLyAIFI2350caNCqSeNVco8FTxdQYuIn/d1doWGM4AhL2EUMqEAQjkJ7iegDec/l5qco9tPMca1cunEaxgfE9vYr+79zhhj0fL6mRBblX3giDMoYEIK1FWVlOG3DnURuxDB0O+k4mersGjUc2c5VURc4uP6X0k61Ewu5ewgXzzx5KOwU/iLMEYDBF1HssyNGt45INwCBvh88Drym4FMsWgVQQLDgL1ohXYWt1rRZSNnxmeFoJT6GdnhZ63yGsKIkTKxizrN53TaB5YqeGd77Qt/CkncmbiMruJDYo499hraVSqRjuSw4G3zXKRxGYBo4kWhT/WWujLSudiRDDs+CB5rI8NhLyCZi9LxAG182EQmNiATJ1V15ohr3y0LnGRpHFFq4CaDUtkP/miiJuUABmX+sb6Hq0PH4lQ5p6AtW7mJTQrPmF7AhOmFzQsF62ETOHHiB7Bcma+qhVxsVPuLw4lsYmObGf1vQlL3TT3YEUupORW8FjnOOfHQKd876fDhljkKJKMZtb4kvg1W6OjujOzmT2UUBIxTtlzDeaNZrvFUgWoXScbaGcZKtIZjMKbLxoRTQpiu0PdDApiweQGRiiPPqgfLvv7h3/wLVZU5NsYv4xCwAJSATnc68w+i3+Nw0/sUE/WUlx31CqHQywKUfWncR8zhV5qliGZX6lkwfM2kfSKTQz3iV1MtcmdHhl5SvoLBt5datzj2vagQ3NXAdjbeI8jCrxb0TbR50CdlZbGKynr1cZT3jvSi6c6FIuM/EgFfL5CBJu+K5Ojg8gNULvJhSM4uAZ8ErmO3PpkthHFRCibC1zX6u6asFIScN937MIYw3Kjg/JNujmmKGUIHLKX0wzBSxPbjQbCNF5SPcSAdgMXnH38LY8xPuJ/gAna3t39zgz2sx2zEMVZYFmsh7O0naX/5EKVeK85wBS7rXPqJtvtX6MQLT8NeamFY9vM3bylyF0bR7KBshwF2uiE9ueR46I4zzYoxijp5kC1cLzsCpk38Og5cYnOC5UgV3Yn42wLEpOLdGOy7uETM+5V74BBdI0Ss4zjgHhv9BM93Jt1Tl48xFBuKH06E5tHggWXBE+HcL2eDN4apNOL0uQ8XkgkgCQvv8QMyqmEkgXuD0wdhUTMKd9H79THQdry8t1576mLFIhbwCYwlSOPD6DLaqXupySJwqI+Pjn9F5CmKB90IOVUzJdCEwkjRbhyUKkazcLi0XT4IFWId4svx0+jZugzeflZy5efJwSEzilxB/x98XDmtByh1ndOLPqcmJ8CqpMzoRhzcwMUzIkXHCWMnCwxi42UkeiJ6ed5/WGeNn4dk3km3wpLlzXYw7IPE4oDP9MO5sKd8T5wEwLuZ9J8PZBpzySgDHdoHhk+qkfVc+5vYzDiju65cH/jD8l4m4ZMuYIWqxS7NRZX6GC6DEgZloIga6SOtEsga3O/M4Imj0HsVpjI1CzJI0sPculiGJdYA57Bx+aFbU5+1Ta9dKD8MRH+VSy1LVdAZ9Ye6Fy8ftOkdgE/rHTU2pYeHa3TNXPWMrVePa9/gFf4VuCPx9SouGj+lGmwJplU6/HTQKgNrnk4MTV6eNlom8OIw+ULWx0ZnUxz4lXEXBbkh5cfXVH2AiGrCytPj6DFe/g/9yd+HJuS5ojUMstBPNGB5QjdHF/pBVWUIszPXr6n2SaOo8LQ/mXKk80F5JWFnwVY306MFhsxbSEUNHYx2ZqixD73ii6Qo8bIquxzZCBSCOP+qZoDoZG0daEHuA6ug50ptWrLO1gN9vdHPOd0Gp2Ma/IrlBLTZEEwfDOioG1DzSu7vfYeEY/M0TgFFzS1ryn3OEF6qkPt4iWJ3SjFc2UACGsm0YYcQDxop6xMg2JrxGo6SZ+1s57em0a8Wu8SrTx5shnU0TIjqJUZKlhPXOiUTSpkUmTsyV0eH6MPedsHqRSuujjzIALScV9FSdL2niAy+ArGUfVOwf5HIzVkNga2Ycb7qyOLHbykW1Jtp29HuCY8aCfskh0SkTjsHNOZzjiCwdO2cSY86Ao7LueYwR4gi055HymSMHzsDO3xDISmnNTflCZdzAWdyOeOj9pxbeMX/5KdfIsbshQWbh2OvoWoMTXsDR7a3B0yDMp08imMJBhPrPNB6S5W62ZGpzc4gK2XdHnF0SBFbne6UrEbk1VqBoz0b2f4Y8vqYqnbTB5ty3oA6oJdtAOUdZ3aWVxvdWIjDyn6sY+KD6J3cdZ1N+MicxgZJE5gyjQOFrztgzPdIWGWtTzsTDcusK3z7mklTYtJJ8R+rPq1jrt/wEpvUMOjGH3vVwt8ZdcD2dwOyCezVCtV99oyNYqwofF38OjsuxwRRSe2eC2plXKQT1RvG7KQBoTqLfd/P4CYJcdTh5uwFDYfc7BQSri7ciZcZKfTWEC5A7qjzC7o3MFTGYVWAw0B9tCRstXZFS3awxJmyovDxKbY7aVNiR7l4BgDxNWwuZsD5ILeEZ5F6/Vos9GiVBI/IbcGOlzW04Z6+VNkLcHKnbuDyCG1KN0bTwmno7JmJY3oYBNvvC6Newtbw6btHUznDnaJCf8JgqvKQTeNPVWgHEheluvhBhu2gWd2KayyRhQ3Ajx7ZEis5SOofbo6yOMhn7ZFoJseYJqg/ZWJ0Xuus6G2s2oI5NwzJDIm9skIljV23SygIkXrJXoMIb9jXjS5wy1Op3o0SjdtfTAkhyoXYO8MWpX7CXTQBFW4Y44kDZJJUMszv7Tjf25zNYXFX3LLL2hkTsMnv8wxvJh2kChgNiCm4jCIbV/ZDQm7wQ+Gmp3GaW3NMsvY7KFTUbUYAsI7J6cEFb6m/NBb2S44l8sPbc3Gr67tuGGCLZcf2H/ewwJ+uxs5UXWnA2Ab+T4n+m7xm+OBShhpfk7MUJrhAH2Cg7hSWeCzA2KepCjfNzF+b6J6QTyTVmXqILzOkNXhqR8DNDbL+mutx9X+sSD3DWbnu2sFGvfHP7AlbzcBU6xvmMYDxeUQnYErc2q2jj2U0qWlNkNEgxkLdlFL6DFaSX2r7qv0qsJCcS+nr1wE8ZQk1/Yv2UQovGfC6vsHWGYfOvgo8DEf2o5gh5i/UWUR4ReTEl/r8ezw8SXEs4AZsuCqh1iG62/k22Nv9YyugsNECnz04xxZfu2vmlcuAwA2U58TnXqZGiAki4GwuJf0s8hWifdxAEsi+W4C3feFMSPr9iCLA8IKoIYuF/3VPQOdlpsX7nwuqJMHslnln4IMJsB+hJIhZuce+gyaEkfKpgkqRKNbTNr8GRm4eX4V5TZRURyp9lTweIdNGkRgzpU/gitpzHFnW1qsyIZoDNnjIbdQSCWKdevciLLXBtbYfp/IaroUh7NphuTHSsMmD0J+vsF/GisBWqUgzWqMLoM5/Y3VXMC7011zmBXRxyRc7jTyrlnAfclDhxTSsJAFWn8ZIS8W7g3BLoAGzN19CfpPLQIRxJJXR4U9hZXWp3d2U1R325BdA6wmdO911S7MCeY3XiuojYKtxgYPh6wGi3pJql8iMyrGfVlUHObMld7V309Rg89bOlUinn0bm37PTSA8aTmj9esJniRDAI27NYA9crR8HJOg3m8pcMvgdX06AXdHY+zcpzxi3aKMNe/noqQmr5WUGuYoLJFj/eDg4yhWbB3dSjn6Iw18HjXvcf7cTLm9PWfM2J1QQjxz3QItPPAq7JO8AaQJRx3rYomY2QPNhK71KbnmhclO/TROfT0bkY1qSKFHFjHn6HUKLvnLu8W/FPIhbagPC7I7aH8fMxBfzp2MGp3KqlIueVFdsJd2VCDxUB+YyrD4fe/3xOL/HAaO8e+w/NwZL0oJQZJFKofcb6DdBn/fQ7eSxXXL59Cg4NRFQeoF7Y23JmCT4YElAFTmXlzPug5j5z/jXXut/BgeNculgG3f9n7w6RVgu06m0Gu1oc/GfVseMJLWLfsCoTbHj3tP/elcSZvqJJG8X3d3PZvioB9QXcu/9mJdg40GlL0zpeZbJyHMqkLv2hvpAbWqZU7IUv9qtyWzHLouErFI9GX6Jlf1KCPaf3cc63DegbZdeOWD8prKtyGn/p8mtUNba1fkoRUiNsRQ+EI2HvIfDQRt4soLQm9ZNoHVPtRJy6Fb2ZfsZMMpjkcMHkOwjmjuaF6Qjy1WWp817w2V45JIPuxoeWXsuSyzpMUOdQUVjuTg7MGzLD33vGiuZuD+Iy2Co+6d9hmzTPJ/qJ+PRpCBoGskUUzzoUmquaI4+EFdPHxV99JN+Q0f+MANAswYOwDjDQg/yyA1iObyPR2Lip+a9BLSdJB+tK0ju+Ahf2b9c8V9VZg280SjPMl1s6IsaBbupwtD0Od7TUCa8vbnIHi8BUHI/SooE0YtUU8ELPaNYFDytfpeu9K5VNua88ZCB2scRTQSk3qrK8K9srVL1h8Iaa5f5skwO21eWrwanSDyo9/PjmiKiH/bxDcxy1SyUAI0XpObXMb7bMRnitD0jIRuVxMmmMX08zPTsOTwCVp108xaORI6cokjqKrsPxfJGHNuMDtRejh84azcyC2cAnVpnfylelG7cMEgLjiXP1IpnkbEsGt+4dzY8benkgqZn62PDJbhbRzVj4ZmGtBPTN3BSR0G2If3NoLUteYnCudNitna/gt+WrPBAaOhMV3AI4HJoOsnQ20bhjfySUNIyh95NpqTClbIiPPo0a2GsTTZTg742Xa3YQdvTmpK5l66CeKJzJJtPA0F3R9Mc22GmMU4BJhw8pXTKu9nrPHZNiNFWGL3E/p5W1j6Jr63dantcgxNjdpObJWRetASyLiTcMOkFfiwthYXme/kMVCLmPko50ETeiQWGfRb1Dh3QHvmTqtfw7ckBuKrqEP9HnzpAmWyjh+edvzMsSC152agZEszNS87cy324AIG/xLZ66pwUxXcLBHipOpG9JJ5tOGskRXgOG6aFZcec6laKYGVbAxi8ugM27d/PPb8jGWpb3DcgDwhgltdAsX2mGRhotE6bFA+abclxCaH/AEgk4KRXIpcEf0KA3LfGGNftbDip4ntSajrebWYCdkZIhRTG20hQ5VPOqPEtmM9Z2jrOARkCgDoeBdCYBltsntA1K6i5rT2arrMCGKMhUiocEPzkrmo45retx4t/ck+QCr7cCBSDuNJCfzvRvpBCjd4KGtzGnsChto7ZocZQqp3jiDLlihnmAOZ+eXmGBxNZp/8JRsFv+IZDsJhcU/LoSVaFYyUvxH6PWwyxSAJ8+96aTptgvoFCqnwGm7xw5PeF92dkbGSBZ1rWYN6fJO8ezGWWXRtgEEltyerec3t4zUyUpTusthGd5J1OTdZUBFcNEqQPKGYiIUr0+h4F7/ceP4v3QKem/2TnWfIN3mZV6s92uAyVIQBHrofP7oKBqt0jvURnMpJZI3T1ygWRQ46ziu4FalAMZbO4PXe4MBxzxIHOjENSxW2fQu1tqwi3wSi/TD++SpqOXSEUQ5x1e8u2OFqKA3ch2HcQqH4tjbJB1e4RtYrfS+QP94iS0vrpyanzjCLlbNPVkytdXOR7qZOdp8RKnhk4UHJK+Ul4XunUBzw1AZHUxmQZZTYr9kIzVKt9PPcYRkZ1BYmDt2Z4l9IfqWNMxaPjtmiRKlKJmuNHxDCD+9W1+fXeKwOjJ3/JNiK+nDFjxcqOzdVexXn6R5GvurpeCvux6etDz8C8o61vzz3VBV635Lh2NA/PQD0bbyZCtxYIbv7SBARCD+v/yvKJFD7gzWLGo+XmxfkslqhlJtl97xnUlK9JlfE4iXy6H4ixtbaQbPFr4QAEBGcoplCLiZgmlJlhWKyhkr/EbLNFwThC9NAgIE+VaOqRLR4TnVjqgkeG630OjITkukKrcuxhANTF00SKbY6/GWK5uTssqqxhUOJzm3zAPd07AN/ngtYrE4Mho7gjeNsPMqhVX92uGcpKUdVEJQHwrvk9dTYI6ZcBmO4uSf2ZKXn83489xCHSHpQKXC4MRi7aRciqRJHx79gm8Gx/JIisuhExD+CjvpO4CbVxFC5FezGx0BSvuvNrwIKCAdcxyJK9UNoGHuVHcjoub6GEPH4NeZms8gDXrKRm9mypblXYPiAMBUO5DAxR8SXaC+taT4H4RRclxzm+55QkU5wsnTcwvl6Rgrza5OuRvyMjbmyH6BmgTkRD/PO3F81ITzVPBDvBCqvIfFwPzN+Bokdh2LQqxBq7piTTsenJ9fVhYBckDkvPmAixdq9jlSqFKlQflSH85Hqinh7OhKvEFm6/2ol27FqHU2+kvy3KFON/OnCsg/tQG/amMBOIds6HGkXrVrYdkGPY0dWFzFUvEks+5LH49LALYMA1r2L5XCimdkJMRjzCmgVHVgvQt5szSCHATsp2tB/s8oJmdMVfh1svicn+6zS1iXrSWj7mnJ" />
+
+<input type="hidden" name="__VIEWSTATEGENERATOR" id="__VIEWSTATEGENERATOR" value="B20BD8B0" />
+<input type="hidden" name="__EVENTVALIDATION" id="__EVENTVALIDATION" value="FEl7BJSKDO+mWz5qRzhHuCj5nyAWOUGwO+7zFJxwb7GiYS7Xhqx8Rj6qXnFJbHHFPick3hVmMyz2ujOUVMVpyDHYc4jfyNZLfxoBH3UqJytqut9CylDbWrKDklABPaySzcaO4MJ8SoXUt7s1RqlAQA==" />
+        <div class="app-container app-theme-white body-tabs-shadow fixed-header fixed-sidebar">
+            <div class="app-header header-shadow d-print-none ">
+                <div class="app-header__logo">
+                    <div class="logo-src"></div>
+                    <div class="header__pane ml-auto">
+                        <div>
+                            <button type="button" class="hamburger close-sidebar-btn hamburger--elastic" data-class="closed-sidebar">
+                                <span class="hamburger-box">
+                                    <span class="hamburger-inner"></span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="app-header__mobile-menu">
+                    <div>
+                        <button type="button" class="hamburger hamburger--elastic mobile-toggle-nav">
+                            <span class="hamburger-box">
+                                <span class="hamburger-inner"></span>
+                            </span>
+                        </button>
+                    </div>
+                </div>
+                <div class="app-header__menu">
+                    <span>
+                        <button type="button" class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav">
+                            <span class="btn-icon-wrapper">
+                                <i class="fa fa-ellipsis-v fa-w-6"></i>
+                            </span>
+                        </button>
+                    </span>
+                </div>
+                <div class="app-header__content">
+                    <div class="app-header-left text-center timeline-title">
+                        <h4>Student Portal - SIS</h4>
+
+                    </div>
+                    <div class="app-header-right">
+                        <div class="header-dots">
+                        </div>
+
+
+                        
+
+    <div class="widget-content-right ml-3 header-user-info ">
+        <h5><span id="ContentPlaceHolderperson_LabelPageInactive"><font color="Red"></font></span></h5>
+    </div>
+    <div class="header-btn-lg pr-0">
+        <div class="widget-content p-0">
+            <div class="widget-content-wrapper">
+                <div class="widget-content-left">
+                    <div class="btn-group">
+                        <a data-toggle="dropdown" aria-haspopup="true" aria-expanded="false" class="p-0 btn">Hello,
+                            <span>GUC\mohamed.elsaadi</span>
+                            <a id="ContentPlaceHolderperson_LinkButtonactor" href="javascript:__doPostBack(&#39;ctl00$ctl00$ContentPlaceHolderperson$LinkButtonactor&#39;,&#39;&#39;)"></a>
+                        </a>
+                    </div>
+                </div>
+                <div class="widget-content-left  ml-3 header-user-info">
+                    <div class="widget-heading">
+                        <img width="42" class="rounded-circle" src="/CSS/architectui-html-pro-1.4.0/assets/images/images.png" alt="">
+                    </div>
+                    <div class="widget-subheading">
+                    </div>
+                </div>
+                <div class="widget-content-right header-user-info ml-3">
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+
+                        <div class="header-btn-lg">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+            <div class="app-main">
+                <div class="app-sidebar sidebar-shadow">
+                    <div class="app-header__logo">
+                        <div class="logo-src">
+                        </div>
+                        <div class="header__pane ml-auto">
+                            <div>
+                                <button type="button" class="hamburger close-sidebar-btn hamburger--elastic" data-class="closed-sidebar">
+                                    <span class="hamburger-box">
+                                        <span class="hamburger-inner"></span>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="app-header__mobile-menu">
+                        <div>
+                            <button type="button" class="hamburger hamburger--elastic mobile-toggle-nav">
+                                <span class="hamburger-box">
+                                    <span class="hamburger-inner"></span>
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="app-header__menu">
+                        <span>
+                            <button type="button" class="btn-icon btn-icon-only btn btn-primary btn-sm mobile-toggle-header-nav">
+                                <span class="btn-icon-wrapper">
+                                    <i class="fa fa-ellipsis-v fa-w-6"></i>
+                                </span>
+                            </button>
+                        </span>
+                    </div>
+                    <div class="scrollbar-sidebar" style="overflow-y: scroll !important; overflow-x:hidden !important;">
+                        <div class="app-sidebar__inner">
+                            
+    <div class="p-3">
+        <input type="text" id="search-input" placeholder="Menu Search..." class="form-control">
+    </div>
+    
+    <ul class="vertical-nav-menu" id="menu">
+        <li class="app-sidebar__heading"></li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Main
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/index.aspx" >
+                            
+                            DashBoard
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Main/Notifications.aspx" >
+                            
+                            Your Notification
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Main/StudentFeedback.aspx" >
+                            
+                            System FeedBack
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/UserProfile/UserProfileSearch.aspx" >
+                            
+                            Search for staff
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Attendance
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Attendance/ClassAttendance_ViewStudentAttendance_001.aspx" >
+                            
+                            View Attendance
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Berlin
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Berlin/Default.aspx" >
+                            
+                            Study Abroad
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Course
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/CourseWork/Upload_001.aspx" >
+                            
+                            Upload Course Work
+
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Evaluation
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Evaluation/EvaluateCourse.aspx" >
+                            
+                            Evaluate Course
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Evaluation/EvaluateStaff.aspx" >
+                            
+                            Evaluate Staff
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Exam
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Exam/ExamExcuseFinal.aspx" >
+                            
+                            Final Exam Excuse 
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Exam/MakeupRegistration.aspx" >
+                            
+                            Makeup Registration
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Exam/ViewExamSeat_01.aspx" >
+                            
+                            Exam Seats
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Financial
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Financial/BalanceView_001.aspx" >
+                            
+                            Financial Balance
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Grade
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Grade/CheckGrade_01.aspx" >
+                            
+                            Check Grades
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Grade/CheckGradePerviousSemester_01.aspx" >
+                            
+                            Check Previous Grades
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Grade/Transcript_001.aspx" >
+                            
+                            Transcript
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Registration
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Registration/ChoosePharmacyProject_001.aspx" >
+                            
+                            Pharmacy Project
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/ChoosePharmacyTrainingGroup_001.aspx" >
+                            
+                            Pharmacy Training
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/CourseRegistrationView_001.aspx" >
+                            
+                            Registered Courses 
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/ElectiveNavigation.aspx" >
+                            
+                            Declare Elective/Seminar/Track
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/ExtraCourseReg.aspx" >
+                            
+                            Placement Test Registration
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/LawRegistration.aspx" >
+                            
+                            Law Registration
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/MajorNavigation.aspx" >
+                            
+                            Declare Faculty/Major
+
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/SummerDashboard_001.aspx" >
+                            
+                            Summer System
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Registration/SummerLanguageCoursesRegistration_001.aspx" >
+                            
+                            Summer Language
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Reservation
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Reservations/Bus/Reservation.aspx" >
+                            
+                            Bus Reservation
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Reservations/GermanPlacementReservation.aspx" >
+                            
+                            German Placement Reservation
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Reservations/Session/SessionReservation_001.aspx" >
+                            
+                            Session Reservation
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Reservations/TripReservation_01.aspx" >
+                            
+                            Trip Reservation
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Scheduling
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Scheduling/ChangeGroupRequest.aspx" >
+                            
+                            Change Group
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Scheduling/GeneralGroupSchedule.aspx" >
+                            
+                            General Group Schedule
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Scheduling/GroupSchedule.aspx" >
+                            
+                            Your Schedule
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Scheduling/SearchAcademicScheduled_001.aspx" >
+                            
+                            Academic Schedule
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+             <li >
+                <a href="#" class="main-menu ">
+                   
+                    <i class="metismenu-icon icon_application-form"></i>
+                    Thesis
+                    <i class="metismenu-state-icon caret-left icon_double-down"></i>
+                    
+                    
+                </a>
+             <ul>
+
+            
+                     
+                        <li>
+                            <a href="/student_ext/Thesis/Internship.aspx" >
+                            
+                            Internship
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Thesis/ThesisNavigation.aspx" >
+                            
+                            Select Thesis
+                            </a>
+                        </li>
+                    
+                
+                     
+                        <li>
+                            <a href="/student_ext/Thesis/UploadThesisTopicFile_01.aspx" >
+                            
+                            Upload Thesis Topic File
+                            </a>
+                        </li>
+                    
+                
+                  </ul>
+                  </li>
+        
+
+    </ul>
+
+
+
+
+
+
+                        </div>
+                    </div>
+                </div>
+
+                <div class="app-main__outer">
+                    <div class="app-main__inner">
+                        <div class="">  
+                            <div class="">
+                                <div class="">
+                                </div>
+                                <div class="">
+
+                                    
+    <div class="app-inner-layout__header bg-heavy-rain">
+                            <div class="app-page-title">
+                                <div class="page-title-wrapper">
+                                    <div class="page-title-heading p-2">
+                                        <div class="page-title-icon ">
+                                            <i class="icon_terms-and-conditions"></i>
+                                        </div>
+                                        <div>
+                                            <span id="ContentPlaceHolderright_LabelPageName" class="h5">Your Schedule</span>
+                                            <br />
+                                              <span id="ContentPlaceHolderright_Labelmasterpagemessage" style="font-size:16px;color:red;"></span>
+                                            <div class="page-title-subheading">
+                                            
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="page-title-actions d-print-none">
+                                       <div class="p-2">
+                                           <a href="https://apps.guc.edu.eg/www/BRM/UserEntries.aspx" data-toggle="tooltip" title="" data-placement="bottom" class="btn-shadow mr-3 btn btn-dark" data-original-title="Please contribute with us to enhance your experience">
+                                                <i class="fa fa-stack fa-star"></i>
+                                            </a>
+                                       </div>
+                                        
+                                    </div>    </div>
+                            </div>                </div>
+   
+
+    
+
+
+    <div class="row">
+        <div class="col-12">
+
+
+            <div class="row">
+                <div class=" offset-lg-3 offset-xl-3 col-xl-6  col-lg-6 col-md-12 col-sm-12">
+
+                    <div class="main-card mb-3 card text-left">
+                        <div class="card-header">Information:</div>
+                        <div class="card-body">
+                            <br />
+                            <br />
+                            <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_scdTpLbl"><b><font face="Arial" size="6">64-2714 - Mohamed Ahmed Mohamed Salaheldin Osman Elsaadi</font></b></span>
+                            <br />
+                            
+                            <br />
+                            <br />
+                            
+                            <b>Notes:</b>&nbsp;
+                                            <p>
+                                                To View Faculty Time Slots kindly check the below table, 
+                                                <strong>The&nbsp;attandance of&nbsp;Biweekly Slots:</strong>
+                                                1st Week’s sessions (in the Academic Calendar) will be considered as the Odd session.
+
+                                            </p>
+                            <br />
+                            <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_Table1" bordercolor="#999999" cellspacing="0" cellpadding="0" align="center" border="0">
+	<tr>
+		<td width="100">
+                                        <b>Odd Session:</b>
+                                    </td>
+		<td bgcolor="#999999" width="150">&nbsp; &nbsp; &nbsp;
+                                    </td>
+		<td>&nbsp; &nbsp; &nbsp;</td>
+		<td width="100">
+                                        <b>Even Session:</b>
+                                    </td>
+		<td bgcolor="#66ccff" width="150">&nbsp; &nbsp; &nbsp;
+                                    </td>
+	</tr>
+</table>
+
+                            <br />
+                            <table class="table table-bordered">
+										<tr>
+											<td>
+												<b>For Pharmacy, Applied Arts and Law Study Groups:</b>
+												<table class="table table-bordered">
+													<tr>
+														<td>
+															First Period
+														</td>
+														<td>
+															Second Period
+														</td>
+														<td>
+															Third Period
+														</td>
+														<td>
+															Fourth Period
+														</td>
+														<td>
+															Fifth Period
+														</td>
+													</tr>
+													<tr>
+														<td>
+															8:15-9:45
+														</td>
+														<td>
+															10:00-11:30
+														</td>
+														<td>
+															12:00-13:30
+														</td>
+														<td>
+															13:45-15:15
+														</td>
+														<td>
+															15:45-17:15
+														</td>
+													</tr>
+												</table>
+											</td>
+										</tr>
+										<tr>
+											<td>
+												
+											<b>For Engineering, Management and Business Informatics Study Groups:</b>
+											<table class="table table-bordered">
+																<tr>
+																	<td>
+																		First Period
+																	</td>
+																	<td>
+																		Second Period
+																	</td>
+																	<td>
+																		Third Period
+																	</td>
+																	<td>
+																		Fourth Period
+																	</td>
+																	<td>
+																		Fifth Period
+																	</td>
+																</tr>
+																<tr>
+																	<td>
+																		8:15-9:45
+																	</td>
+																	<td>
+																		10:00-11:30
+																	</td>
+																	<td>
+																		11:45-13:15
+																	</td>
+																	<td>
+																		13:45-15:15
+																	</td>
+																	<td>
+																		15:45-17:15
+																	</td>
+																</tr>
+															</table>
+														
+											</td>
+										</tr>
+									</table>
+                            <br />
+                            
+
+                        </div>
+                        <div class="d-block text-right card-footer">
+                        </div>
+                    </div>
+
+
+                </div>
+
+
+
+            </div>
+
+            <div class="row">
+                <div class="col-12">
+                    <div class="main-card mb-3 card text-left">
+                        <div class="card-header">Schedule:</div>
+                        <div class="card-body" style="overflow-x: auto;">
+                            <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_scdTbl" width="100%" align="center" class="table table-bordered">
+	<tr>
+		<td width="100" style="height: 29px">
+                                        <p align="center"><font size="2" face="Arial, Helvetica, sans-serif"></font>&nbsp;</p>
+                                    </td>
+		<td width="180" style="height: 29px">
+                                        <div align="center">
+                                            <font size="2" face="Arial, Helvetica, sans-serif" style="z-index: 0"><font size="2" face="Arial, Helvetica, sans-serif">First 
+									Period</font></font>
+                                        </div>
+                                    </td>
+		<td width="180" style="height: 29px">
+                                        <p align="center"><font size="2">Second Period</font></p>
+                                    </td>
+		<td width="180" style="height: 29px">
+                                        <div align="center"><font size="2">Third Period</font></div>
+                                    </td>
+		<td width="180" style="height: 29px">
+                                        <div align="center"><font size="2" face="Arial, Helvetica, sans-serif">Fourth Period</font></div>
+                                    </td>
+		<td width="180" style="height: 29px">
+                                        <div align="center"><font size="2">Fifth Period</font></div>
+                                    </td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_Xrw1">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif">Saturday</font></strong></td>
+		<td width="180">
+                                        <table id="Table3"  width="100%" class="table table-bordered"> 
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG T038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">D4.108</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Digital Logic Design'><font face="Arial, Helvetica, sans-serif" size="2">ELCT 201
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table4" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR1C2" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#ffffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR1C2"><b><font face="Arial">MATH 203 Lecture (2ENG L009)<br>H16</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table5" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR1C3" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#ffffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR1C3"><b><font face="Arial">ELCT 201 Lecture (2ENG L009)<br>H16</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table6" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG T038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">D4.309</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Engineering Drawing & Design'><font face="Arial, Helvetica, sans-serif" size="2">ENGD 301
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table7" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR1C5" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#99ffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR1C5"><b><font face="Arial">Free</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_Xrw2">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif">Sunday</font></strong></td>
+		<td width="180">
+                                        <table id="Table8" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG IX+X 2G T031</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">C2.107</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Basic German 2'><font face="Arial, Helvetica, sans-serif" size="2">DE 202
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table9" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG T038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">C5.106</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Mathematics I'><font face="Arial, Helvetica, sans-serif" size="2">MATH 203
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table10" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2 ENG IX SM T028</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">B4.107</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Scientific Methods (A1)'><font face="Arial, Helvetica, sans-serif" size="2">SM 101
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table11" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR2C4" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#ffffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR2C4"><b><font face="Arial">MATH 203 Lecture (2ENG L009)<br>H13</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table12" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR2C5" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#99ffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR2C5"><b><font face="Arial">Free</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltR3">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif">Monday</font></strong></td>
+		<td bgcolor="#99ffff" colspan="6" align="center"><b><font face="Arial, Helvetica, sans-serif">Free</font></b></td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltR4">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif">Tuesday</font></strong></td>
+		<td bgcolor="#99ffff" colspan="6" align="center"><b><font face="Arial, Helvetica, sans-serif">Free</font></b></td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_Xrw5">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif">Wednesday</font></strong></td>
+		<td width="180">
+                                        <table id="Table23" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR5C1" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#99ffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR5C1"><b><font face="Arial">Free</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table24" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR5C2" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#ffffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR5C2"><b><font face="Arial">PHYS 202 Lecture (2ENG L009)<br>H13</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table25" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG T038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">C5.101</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Mathematics I'><font face="Arial, Helvetica, sans-serif" size="2">MATH 203
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table26" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG T038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">D3.104</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Introduction to Computer Programming'><font face="Arial, Helvetica, sans-serif" size="2">CSEN 202
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table27" class="table table-bordered" width="100%">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG P038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">D3.105</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Introduction to Computer Programming'><font face="Arial, Helvetica, sans-serif" size="2">CSEN 202
+                                                            Lab
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_Xrw6">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif">Thursday</font></strong></td>
+		<td width="180">
+                                        <table id="Table28" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR6C1" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#ffffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR6C1"><b><font face="Arial">PHYS 202 Lecture (2ENG L009)<br>H13</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table29" class="table table-bordered" width="100%">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR6C2" border="0" cellspacing="0" cellpadding="0" width="100%" bgcolor="#ffffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR6C2"><b><font face="Arial">CSEN 202 Lecture (2ENG L009)<br>H12</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+		<td width="180">
+                                        <table id="Table30" bordercolor="#eeeeee" cellspacing="0" cellpadding="0" width="100%"
+                                            border="1">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG T038</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">C5.204</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Physics II'><font face="Arial, Helvetica, sans-serif" size="2">PHYS 202
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table31" bordercolor="#eeeeee" cellspacing="0" cellpadding="0" width="100%"
+                                            border="1">
+                                            
+                                                    <tr>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">2ENG IX+X 2G T031</font></td>
+                                                        <td ><font face="Arial, Helvetica, sans-serif" size="2">C2.205</font></td>
+                                                        <td background='../../../Images/External/Reports/half.gif' align="center" title='Basic German 2'><font face="Arial, Helvetica, sans-serif" size="2">DE 202
+                                                            Tut
+                                                        </font>
+                                                        </td>
+                                                    </tr>
+                                                
+                                        </table>
+                                        
+                                    </td>
+		<td width="180">
+                                        <table id="Table32" bordercolor="#eeeeee" cellspacing="0" cellpadding="0" width="100%"
+                                            border="1">
+                                            
+                                        </table>
+                                        <table id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltTblR6C5" cellspacing="0" cellpadding="0" width="100%" border="0" bgcolor="#99ffff">
+			<tr>
+				<td align="center">
+                                                    <span id="ContentPlaceHolderright_ContentPlaceHoldercontent_XlblR6C5"><b><font face="Arial">Free</font></b></span></td>
+			</tr>
+		</table>
+		
+                                    </td>
+	</tr>
+	<tr id="ContentPlaceHolderright_ContentPlaceHoldercontent_XaltR7">
+		<td valign="middle" width="100" align="center"><strong><font size="2" face="Arial, Helvetica, sans-serif"></font></strong></td>
+		<td colspan="6" align="center"><b><font face="Arial, Helvetica, sans-serif"></font></b></td>
+	</tr>
+</table>
+
+
+
+                        </div>
+                        <div class="d-block text-right card-footer">
+                        </div>
+                    </div>
+
+
+                </div>
+            </div>
+
+
+
+        </div>
+    </div>
+    <br /><br /><br /><br /><br />
+
+
+    <br /><br /><br /><br /><br /><br /><br /><br />
+    
+
+
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+
+        </div>
+
+
+
+        <div class="app-drawer-wrapper">
+            <div class="drawer-nav-btn">
+                <button type="button" class="hamburger hamburger--elastic is-active">
+                    <span class="hamburger-box"><span class="hamburger-inner"></span></span>
+                </button>
+            </div>
+            <div class="drawer-content-wrapper">
+                <div class="scrollbar-container">
+                    
+    <h3 class="drawer-heading">ShortCuts</h3>
+    <div class="drawer-section">
+        <div class="row">
+        </div>
+        <div class="divider"></div>
+
+    </div>
+
+
+                </div>
+            </div>
+        </div>
+
+        
+
+    
+
+
+
+        
+
+        <input type="hidden" name="ctl00$ctl00$div_position" id="div_position" value="0" />
+    </form>
+
+    <script type="text/javascript" src="/CSS/architectui-html-pro-1.4.0/main.87c0748b313a1dda75f5.js"></script>
+    <script src="/CSS/architectui-html-pro-1.4.0/jqueryV3.6.3.min.js"></script>
+    <script>
+        $(document).ready(function () {
+
+            var x = $(location).attr('search');
+            $('li.mm-active').closest('a.mm-active').removeClass('mm-active');
+            $('li.mm-active').removeClass('mm-active');
+            $('a[href="' + location.pathname + x + '"]').closest('li').addClass('mm-active');
+            $('a[href="' + location.pathname + x + '"]').addClass('mm-active');
+        });
+    </script>
+
+    <script>
+        $('.app-container').addClass('closed-sidebar');
+        //maintain postion scroll
+        $(document).ready(function () {
+            var div_position = $("#div_position");
+            if (div_position.val() != 0) {
+                $(window).scrollTop(div_position.val());
+            }
+            $(window).scroll(function () {
+                div_position.val($(window).scrollTop());
+            });
+        });
+
+
+        //hide fields from table
+        $(document).ready(function () {
+            $(".modal").each(function () {
+                $(this).attr("data-backdrop", "static");
+                $(this).attr("data-keyboard", "false");
+            });
+            $(".table").each(function () {
+                var ownerIndex = $(this).find('th:contains("ID")').index() + 1;
+                $(this).find('td:nth-child(' + ownerIndex + ')').hide();
+                $(this).find("tbody tr, thead tr").children(":nth-child(" + ownerIndex + ")").hide()
+
+                var ownerIndex2 = $(this).find('th:contains("URL")').index() + 1;
+                $(this).find('td:nth-child(' + ownerIndex2 + ')').hide();
+                $(this).find("tbody tr, thead tr").children(":nth-child(" + ownerIndex2 + ")").hide()
+
+                var ownerIndex3 = $(this).find('th:contains("SeasonId")').index() + 1;
+                $(this).find('td:nth-child(' + ownerIndex3 + ')').hide();
+                $(this).find("tbody tr, thead tr").children(":nth-child(" + ownerIndex3 + ")").hide()
+
+            });
+
+            $(".table").each(function () {
+                var newul = $(this).parent().attr("Style", "overflow-x: auto; ")
+            });
+
+            $(".dropdown-menu-header").click(function () {
+
+                $(this).next(".card-body").toggle("slow");
+
+
+            });
+            $('.app-container').addClass('closed-sidebar');
+
+        });
+    </script>
+
+
+    
+
+    
+
+
+    <script>
+        $(document).ready(function () {
+            var expanded = false;
+            var menu = $('#menu').html();
+
+            $('#search-input').on('input', function () {
+                var searchQuery = $(this).val();
+                searchMenu(searchQuery);
+                if (expanded == false) {
+                    $('#menu li').each(function () {
+                        if (!$(this).eq(0).hasClass('mm-active')) {
+                            $(this).find('a').attr("aria-expanded", "true");
+                            $(this).find('ul').addClass("mm-show");
+                        }
+                    });
+                    expanded = true;
+                }
+                if (searchQuery == "" && expanded == true) {
+                    $('#menu li').each(function () {
+                        if (!$(this).eq(0).hasClass('mm-active')) {
+                            $(this).find('a').attr("aria-expanded", "false");
+                            $(this).find('ul').removeClass("mm-show");
+                        }
+                        expanded = false;
+                    });
+                }
+            });
+        });      
+       
+
+        function searchMenu(query) {
+           
+            // Loop through all menu items
+            $('#menu li').each(function () {
+               
+                // Get the text content of the menu item
+                var text = $(this).text().toLowerCase();
+               
+                // If the text content contains the search query, show the menu item
+                if (text.indexOf(query.toLowerCase()) >= 0) {
+                    
+                    $(this).show();
+                } else {
+                    
+                    $(this).hide();
+                }
+            });
+        }
+
+    </script>
+
+
+    <script type="text/javascript" language="javascript">
+        $(document).ready(function () {
+            $(document).on("keydown", disableF5);
+        });
+        function disableF5(e) { if ((e.which || e.keyCode) == 116) e.preventDefault(); };
+    </script>
+</body>
+</html>

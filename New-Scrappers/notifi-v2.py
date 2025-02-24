@@ -1,20 +1,20 @@
 import re
 import json
-import requests
-from requests_ntlm import HttpNtlmAuth  # You might not need this now
+import asyncio
+import httpx
+from httpx_ntlm import HttpNtlmAuth  # NTLM auth for httpx
 from time import perf_counter
 from bs4 import BeautifulSoup
 import warnings
-from urllib3.exceptions import InsecureRequestWarning  # You might not need this now
+from urllib3.exceptions import InsecureRequestWarning
 from flask import Flask, request, jsonify
 from datetime import datetime
 import redis
 from cryptography.fernet import Fernet
 import os
 from dotenv import load_dotenv
-import pycurl
-from io import BytesIO
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 # Load environment variables
 load_dotenv()
@@ -32,7 +32,6 @@ fernet = Fernet(ENCRYPTION_KEY)
 class Config:
     DEBUG = True
     CACHE_REFRESH_SECRET = os.environ.get("CACHE_REFRESH_SECRET", "my_refresh_secret")
-    ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
     BASE_SCHEDULE_URL_CONFIG = os.environ.get(
         "BASE_SCHEDULE_URL",
         "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx",
@@ -49,18 +48,18 @@ class Config:
 
 config = Config()
 
-# Suppress InsecureRequestWarning (if you were still using requests and needed this)
+# Suppress InsecureRequestWarning
 warnings.simplefilter("ignore", InsecureRequestWarning)
 
 # --- Cache Utilities ---
-DATA_CACHE_EXPIRY = 600  # seconds (10 minutes cache for data)
+DATA_CACHE_EXPIRY = 600  # seconds (10 minutes)
 
 
 def get_from_app_cache(key):
     try:
         cached = redis_client.get(key)
         if cached:
-            return json.loads(cached.decode())  # Decode bytes to string
+            return json.loads(cached.decode())
     except Exception as e:
         print(f"[Cache] Get error for key '{key}': {e}")
     return None
@@ -70,47 +69,13 @@ def set_to_app_cache(key, value, timeout=DATA_CACHE_EXPIRY):
     try:
         redis_client.setex(
             key, timeout, json.dumps(value, ensure_ascii=False).encode("utf-8")
-        )  # Encode to bytes
+        )
     except Exception as e:
         print(f"[Cache] Set error for key '{key}': {e}")
 
 
-# --- Fast Scraping Functions for GUC Data (adapted from your initial fast code) ---
-def multi_fetch(urls, userpwd):
-    """Fetches multiple URLs concurrently using pycurl."""
-    multi = pycurl.CurlMulti()
-    handles = []
-    buffers = {}
-
-    for url in urls:
-        buffer = BytesIO()
-        c = pycurl.Curl()
-        c.setopt(c.URL, url)
-        c.setopt(c.HTTPAUTH, pycurl.HTTPAUTH_NTLM)
-        c.setopt(c.USERPWD, userpwd)
-        c.setopt(c.WRITEDATA, buffer)
-        c.setopt(c.FOLLOWLOCATION, True)
-        c.setopt(c.TIMEOUT, 10)  # Timeout for each handle
-        multi.add_handle(c)
-        handles.append(c)
-        buffers[url] = buffer
-
-    num_handles = len(handles)
-    while num_handles:
-        ret, num_handles = multi.perform()
-        multi.select(1.0)
-
-    results = {}
-    for url, c in zip(urls, handles):
-        results[url] = buffers[url].getvalue().decode("utf-8", errors="replace")
-        multi.remove_handle(c)
-        c.close()
-    multi.close()
-    return results
-
-
+# --- HTML Parsing Functions ---
 def parse_student_info(html):
-    """Parses student info HTML using BeautifulSoup with lxml."""
     soup = BeautifulSoup(html, "lxml")
     info = {}
     prefix = "ContentPlaceHolderright_ContentPlaceHoldercontent_Label"
@@ -123,33 +88,31 @@ def parse_student_info(html):
     }
     for label, key in mapping.items():
         element = soup.find(id=f"{prefix}{label}")
-        if element:
-            text = element.get_text(" ", strip=True).replace("\r", "")
-            info[key] = text
-        else:
-            info[key] = ""
+        info[key] = (
+            element.get_text(" ", strip=True).replace("\r", "") if element else ""
+        )
     return info
 
 
 def parse_notifications(html):
-    """Parses notifications HTML using BeautifulSoup with lxml."""
     soup = BeautifulSoup(html, "lxml")
     notifications = []
     table = soup.find(
         id="ContentPlaceHolderright_ContentPlaceHoldercontent_GridViewdata"
     )
     if table:
-        rows = table.find_all("tr")[1:]
+        rows = table.find_all("tr")[1:]  # Skip header row
         for row in rows:
             cells = row.find_all("td")
             if len(cells) < 6:
                 continue
-            notif = {}
-            notif["id"] = cells[0].get_text(" ", strip=True).replace("\r", "")
-            notif["title"] = cells[2].get_text(" ", strip=True).replace("\r", "")
-            notif["date"] = cells[3].get_text(" ", strip=True).replace("\r", "")
-            notif["staff"] = cells[4].get_text(" ", strip=True).replace("\r", "")
-            notif["importance"] = cells[5].get_text(" ", strip=True).replace("\r", "")
+            notif = {
+                "id": cells[0].get_text(" ", strip=True).replace("\r", ""),
+                "title": cells[2].get_text(" ", strip=True).replace("\r", ""),
+                "date": cells[3].get_text(" ", strip=True).replace("\r", ""),
+                "staff": cells[4].get_text(" ", strip=True).replace("\r", ""),
+                "importance": cells[5].get_text(" ", strip=True).replace("\r", ""),
+            }
             button = cells[1].find("button")
             if button:
                 email_time_str = button.get("data-email_time", "")
@@ -161,20 +124,18 @@ def parse_notifications(html):
                         f"Error parsing email_time '{email_time_str}': {e}. Using current time."
                     )
                     notif["email_time"] = datetime.now().isoformat()
-                subject = (
+                notif["subject"] = (
                     button.get("data-subject_text", "")
                     .replace("Notification System:", "")
                     .strip()
                     .replace("\r", "")
                 )
-                body = (
+                notif["body"] = (
                     button.get("data-body_text", "")
                     .replace("------------------------------", "")
                     .strip()
                     .replace("\r", "")
                 )
-                notif["subject"] = subject
-                notif["body"] = body
             else:
                 notif["email_time"] = datetime.now().isoformat()
                 notif["subject"] = ""
@@ -186,23 +147,20 @@ def parse_notifications(html):
     return notifications
 
 
-def scrape_guc_data_fast(username, password, urls):
-    """Scrapes student info and notifications using fast methods."""
-    userpwd = f"GUC\\{username}:{password}"
-    try:
-        results = multi_fetch(urls, userpwd)
-        student_html = results[urls[0]]
-        notif_html = results[urls[1]]
-
-        student_info = parse_student_info(student_html)
-        notifications = parse_notifications(notif_html)
-
-        return {"notifications": notifications, "student_info": student_info}
-
-    except Exception as e:
-        print(f"Error in scrape_guc_data_fast: {e}")
-        traceback.print_exc()
-        return None
+# --- Asynchronous Scraping with httpx and NTLM ---
+async def async_scrape_guc_data_fast(username, password, urls):
+    domain = "GUC"
+    # Setup NTLM auth using httpx_ntlm.
+    auth = HttpNtlmAuth(f"{domain}\\{username}", password)
+    async with httpx.AsyncClient(auth=auth, timeout=10.0) as client:
+        tasks = [client.get(url) for url in urls]
+        responses = await asyncio.gather(*tasks)
+        htmls = {url: response.text for url, response in zip(urls, responses)}
+    student_html = htmls[urls[0]]
+    notif_html = htmls[urls[1]]
+    student_info = parse_student_info(student_html)
+    notifications = parse_notifications(notif_html)
+    return {"notifications": notifications, "student_info": student_info}
 
 
 # --- Whitelist and Credential Storage ---
@@ -224,6 +182,49 @@ def is_user_authorized(username):
     return False
 
 
+# --- Custom Exception for Auth Errors ---
+class AuthError(Exception):
+    def __init__(self, message, status_code=403):
+        self.message = message
+        self.status_code = status_code
+        super().__init__(message)
+
+
+# --- Individual Auth Check Functions ---
+def check_version(req_version, version_number):
+    if req_version is None or req_version.strip() == "":
+        raise AuthError("Missing version number", 400)
+    if req_version != version_number:
+        raise AuthError("Incorrect version number", 403)
+    return True
+
+
+def check_credentials_presence(username, password):
+    if not username or not password:
+        raise AuthError("Missing username or password", 400)
+    return True
+
+
+def check_whitelist(username):
+    if not is_user_authorized(username):
+        raise AuthError("User is not authorized", 403)
+    return True
+
+
+def check_stored_credentials(username, password):
+    stored_users = get_all_stored_users()
+    if username in stored_users:
+        try:
+            stored_pw = fernet.decrypt(stored_users[username].encode()).decode().strip()
+        except Exception as e:
+            raise AuthError("Error decrypting credentials", 500)
+        if stored_pw != password.strip():
+            raise AuthError("Invalid credentials", 401)
+    else:
+        store_user_credentials(username, password)
+    return True
+
+
 # --- Flask API Setup ---
 app = Flask(__name__)
 
@@ -234,84 +235,59 @@ def api_guc_data():
     password = request.args.get("password")
     req_version = request.args.get("version_number")
     version_number_raw = redis_client.get("VERSION_NUMBER")
-    version_number2 = version_number_raw.decode() if version_number_raw else "1.0"
+    version_number = version_number_raw.decode() if version_number_raw else "1.0"
+    cache_key = f"guc_data:{username}"
 
     def log_event(message):
         print(f"{datetime.now().isoformat()} - {message}")
 
-    if req_version != version_number2:
-        return (
-            jsonify(
-                {"status": "error", "message": "Incorrect version number", "data": None}
+    # Run authentication checks and cache lookup concurrently.
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        auth_futures = {
+            "version": executor.submit(check_version, req_version, version_number),
+            "presence": executor.submit(check_credentials_presence, username, password),
+            "whitelist": executor.submit(check_whitelist, username),
+            "stored_credentials": executor.submit(
+                check_stored_credentials, username, password
             ),
-            403,
-        )
-    if not username or not password:
-        return (
-            jsonify({"status": "error", "message": "Missing username or password"}),
-            400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
-        )
+        }
+        cache_future = executor.submit(get_from_app_cache, cache_key)
 
-    stored_users = get_all_stored_users()
-    if username in stored_users:
-        try:
-            stored_pw = fernet.decrypt(stored_users[username].encode()).decode().strip()
-            provided_pw = password.strip()
-        except Exception as e:
-            return (
-                jsonify(
-                    {
-                        "status": "error",
-                        "message": "Error decrypting credentials",
-                        "data": None,
-                    }
-                ),
-                500,
-            )
-        if stored_pw != provided_pw:
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
-    else:
-        store_user_credentials(
-            username, password
-        )  # Still store even if not previously cached.
+        # Wait for auth tasks.
+        for key, future in auth_futures.items():
+            try:
+                future.result()
+            except Exception as e:
+                return (
+                    jsonify({"status": "error", "message": str(e), "data": None}),
+                    getattr(e, "status_code", 403),
+                )
+        # Check the cache.
+        cached_data = cache_future.result()
 
-    cache_key = f"guc_data:{username}"
-    cached_data = get_from_app_cache(cache_key)
-
+    # If cache exists, return it immediately without scraping.
     if cached_data:
         log_event(f"Serving guc_data from cache for user: {username}")
         return jsonify(cached_data), 200
 
-    log_event(f"Starting guc_data scraping for user: {username}")
-
-    start = perf_counter()
+    # No cache: perform asynchronous scraping using httpx.
     try:
-        data = scrape_guc_data_fast(
-            username, password, config.GUC_DATA_URLS
-        )  # Using the fast scrape function
-    except Exception as e:
-        log_event(f"Error during scraping for user: {username} - {str(e)}")
-        return jsonify({"error": "Failed to fetch GUC data"}), 500
-    elapsed = perf_counter() - start
-
-    if data:
+        start = perf_counter()
+        scrape_result = asyncio.run(
+            async_scrape_guc_data_fast(username, password, config.GUC_DATA_URLS)
+        )
+        elapsed = perf_counter() - start
         log_event(
             f"Successfully scraped guc_data for user: {username} in {elapsed:.3f}s"
         )
-        set_to_app_cache(cache_key, data)  # Cache the fast result
-        return jsonify(data), 200
+    except Exception as e:
+        log_event(f"Error in async scraping: {e}")
+        traceback.print_exc()
+        return jsonify({"error": "Failed to fetch GUC data"}), 500
+
+    if scrape_result:
+        set_to_app_cache(cache_key, scrape_result)
+        return jsonify(scrape_result), 200
     else:
         log_event(f"Failed to scrape guc_data for user: {username}")
         return jsonify({"error": "Failed to fetch GUC data"}), 500

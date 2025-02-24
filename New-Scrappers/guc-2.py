@@ -1,19 +1,19 @@
 import re
 import json
 import requests
-from requests_ntlm import HttpNtlmAuth  # You might not need this now
-from time import perf_counter
+from requests_ntlm import HttpNtlmAuth
 from bs4 import BeautifulSoup
-import warnings
-from urllib3.exceptions import InsecureRequestWarning  # You might not need this now
-from flask import Flask, request, jsonify
 from datetime import datetime
+from flask import Flask, request, jsonify
+import logging
+import os
+from time import perf_counter
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 import redis
 from cryptography.fernet import Fernet
-import os
 from dotenv import load_dotenv
-import pycurl
-from io import BytesIO
+import warnings
+from urllib3.exceptions import InsecureRequestWarning
 import traceback
 
 # Load environment variables
@@ -27,20 +27,19 @@ if not ENCRYPTION_KEY:
     raise ValueError("ENCRYPTION_KEY environment variable not set")
 fernet = Fernet(ENCRYPTION_KEY)
 
+# Suppress InsecureRequestWarning
+warnings.simplefilter("ignore", InsecureRequestWarning)
+
 
 # --- Configuration ---
 class Config:
     DEBUG = True
     CACHE_REFRESH_SECRET = os.environ.get("CACHE_REFRESH_SECRET", "my_refresh_secret")
-    ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
     BASE_SCHEDULE_URL_CONFIG = os.environ.get(
         "BASE_SCHEDULE_URL",
         "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx",
     )
-    BASE_ATTENDANCE_URL_CONFIG = os.environ.get(
-        "BASE_ATTENDANCE_URL",
-        "https://apps.guc.edu.eg/student_ext/Attendance/ClassAttendance_ViewStudentAttendance_001.aspx",
-    )
+    # Two URLs: one for student info and one for notifications
     GUC_DATA_URLS = [
         "https://apps.guc.edu.eg/student_ext/index.aspx",
         "https://apps.guc.edu.eg/student_ext/Main/Notifications.aspx",
@@ -49,18 +48,17 @@ class Config:
 
 config = Config()
 
-# Suppress InsecureRequestWarning (if you were still using requests and needed this)
-warnings.simplefilter("ignore", InsecureRequestWarning)
+# Cache expiry (10 minutes)
+DATA_CACHE_EXPIRY = 600
+
 
 # --- Cache Utilities ---
-DATA_CACHE_EXPIRY = 600  # seconds (10 minutes cache for data)
-
-
 def get_from_app_cache(key):
     try:
         cached = redis_client.get(key)
         if cached:
-            return json.loads(cached.decode())  # Decode bytes to string
+            # Fast cache retrieval like in your CMS code.
+            return json.loads(cached.decode())
     except Exception as e:
         print(f"[Cache] Get error for key '{key}': {e}")
     return None
@@ -70,47 +68,14 @@ def set_to_app_cache(key, value, timeout=DATA_CACHE_EXPIRY):
     try:
         redis_client.setex(
             key, timeout, json.dumps(value, ensure_ascii=False).encode("utf-8")
-        )  # Encode to bytes
+        )
     except Exception as e:
         print(f"[Cache] Set error for key '{key}': {e}")
 
 
-# --- Fast Scraping Functions for GUC Data (adapted from your initial fast code) ---
-def multi_fetch(urls, userpwd):
-    """Fetches multiple URLs concurrently using pycurl."""
-    multi = pycurl.CurlMulti()
-    handles = []
-    buffers = {}
-
-    for url in urls:
-        buffer = BytesIO()
-        c = pycurl.Curl()
-        c.setopt(c.URL, url)
-        c.setopt(c.HTTPAUTH, pycurl.HTTPAUTH_NTLM)
-        c.setopt(c.USERPWD, userpwd)
-        c.setopt(c.WRITEDATA, buffer)
-        c.setopt(c.FOLLOWLOCATION, True)
-        c.setopt(c.TIMEOUT, 10)  # Timeout for each handle
-        multi.add_handle(c)
-        handles.append(c)
-        buffers[url] = buffer
-
-    num_handles = len(handles)
-    while num_handles:
-        ret, num_handles = multi.perform()
-        multi.select(1.0)
-
-    results = {}
-    for url, c in zip(urls, handles):
-        results[url] = buffers[url].getvalue().decode("utf-8", errors="replace")
-        multi.remove_handle(c)
-        c.close()
-    multi.close()
-    return results
-
-
+# --- Scraping Functions ---
 def parse_student_info(html):
-    """Parses student info HTML using BeautifulSoup with lxml."""
+    """Parses student info HTML using BeautifulSoup (lxml) and normalizes text."""
     soup = BeautifulSoup(html, "lxml")
     info = {}
     prefix = "ContentPlaceHolderright_ContentPlaceHoldercontent_Label"
@@ -132,14 +97,14 @@ def parse_student_info(html):
 
 
 def parse_notifications(html):
-    """Parses notifications HTML using BeautifulSoup with lxml."""
+    """Parses notifications HTML using BeautifulSoup (lxml) and normalizes newline characters."""
     soup = BeautifulSoup(html, "lxml")
     notifications = []
     table = soup.find(
         id="ContentPlaceHolderright_ContentPlaceHoldercontent_GridViewdata"
     )
     if table:
-        rows = table.find_all("tr")[1:]
+        rows = table.find_all("tr")[1:]  # Skip header row
         for row in rows:
             cells = row.find_all("td")
             if len(cells) < 6:
@@ -173,6 +138,8 @@ def parse_notifications(html):
                     .strip()
                     .replace("\r", "")
                 )
+                subject = subject.replace("\r\n", "\n")
+                body = body.replace("\r\n", "\n")
                 notif["subject"] = subject
                 notif["body"] = body
             else:
@@ -186,23 +153,34 @@ def parse_notifications(html):
     return notifications
 
 
-def scrape_guc_data_fast(username, password, urls):
-    """Scrapes student info and notifications using fast methods."""
-    userpwd = f"GUC\\{username}:{password}"
-    try:
-        results = multi_fetch(urls, userpwd)
-        student_html = results[urls[0]]
-        notif_html = results[urls[1]]
+def scrape_guc_data_improved(username, password, urls):
+    """
+    Scrapes student info and notifications concurrently using NTLM authentication.
+    Uses a persistent requests.Session with ThreadPoolExecutor.
+    """
+    session = requests.Session()
+    session.auth = HttpNtlmAuth(f"GUC\\{username}", password)
+    session.headers.update({"User-Agent": "Mozilla/5.0"})
 
-        student_info = parse_student_info(student_html)
-        notifications = parse_notifications(notif_html)
+    logging.info(f"Initiating concurrent requests for user {username}")
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_index = executor.submit(session.get, urls[0], timeout=10, verify=False)
+        future_notif = executor.submit(session.get, urls[1], timeout=10, verify=False)
+        index_resp = future_index.result()
+        notif_resp = future_notif.result()
 
-        return {"notifications": notifications, "student_info": student_info}
+    if index_resp.status_code != 200:
+        raise Exception(
+            f"Index request failed with status code {index_resp.status_code}"
+        )
+    if notif_resp.status_code != 200:
+        raise Exception(
+            f"Notifications request failed with status code {notif_resp.status_code}"
+        )
 
-    except Exception as e:
-        print(f"Error in scrape_guc_data_fast: {e}")
-        traceback.print_exc()
-        return None
+    student_info = parse_student_info(index_resp.text)
+    notifications = parse_notifications(notif_resp.text)
+    return {"student_info": student_info, "notifications": notifications}
 
 
 # --- Whitelist and Credential Storage ---
@@ -234,23 +212,25 @@ def api_guc_data():
     password = request.args.get("password")
     req_version = request.args.get("version_number")
     version_number_raw = redis_client.get("VERSION_NUMBER")
-    version_number2 = version_number_raw.decode() if version_number_raw else "1.0"
+    version_number = version_number_raw.decode() if version_number_raw else "1.0"
 
     def log_event(message):
         print(f"{datetime.now().isoformat()} - {message}")
 
-    if req_version != version_number2:
+    if req_version != version_number:
         return (
             jsonify(
                 {"status": "error", "message": "Incorrect version number", "data": None}
             ),
             403,
         )
+
     if not username or not password:
         return (
             jsonify({"status": "error", "message": "Missing username or password"}),
             400,
         )
+
     if not is_user_authorized(username):
         return (
             jsonify(
@@ -263,7 +243,17 @@ def api_guc_data():
     if username in stored_users:
         try:
             stored_pw = fernet.decrypt(stored_users[username].encode()).decode().strip()
-            provided_pw = password.strip()
+            if stored_pw != password.strip():
+                return (
+                    jsonify(
+                        {
+                            "status": "error",
+                            "message": "Invalid credentials",
+                            "data": None,
+                        }
+                    ),
+                    401,
+                )
         except Exception as e:
             return (
                 jsonify(
@@ -275,34 +265,23 @@ def api_guc_data():
                 ),
                 500,
             )
-        if stored_pw != provided_pw:
-            return (
-                jsonify(
-                    {"status": "error", "message": "Invalid credentials", "data": None}
-                ),
-                401,
-            )
     else:
-        store_user_credentials(
-            username, password
-        )  # Still store even if not previously cached.
+        store_user_credentials(username, password)
 
+    # Retrieve cache quickly
     cache_key = f"guc_data:{username}"
     cached_data = get_from_app_cache(cache_key)
-
     if cached_data:
         log_event(f"Serving guc_data from cache for user: {username}")
         return jsonify(cached_data), 200
 
     log_event(f"Starting guc_data scraping for user: {username}")
-
     start = perf_counter()
     try:
-        data = scrape_guc_data_fast(
-            username, password, config.GUC_DATA_URLS
-        )  # Using the fast scrape function
+        data = scrape_guc_data_improved(username, password, config.GUC_DATA_URLS)
     except Exception as e:
         log_event(f"Error during scraping for user: {username} - {str(e)}")
+        traceback.print_exc()
         return jsonify({"error": "Failed to fetch GUC data"}), 500
     elapsed = perf_counter() - start
 
@@ -310,7 +289,8 @@ def api_guc_data():
         log_event(
             f"Successfully scraped guc_data for user: {username} in {elapsed:.3f}s"
         )
-        set_to_app_cache(cache_key, data)  # Cache the fast result
+        set_to_app_cache(cache_key, data)
+        # Return only the scraped data as requested.
         return jsonify(data), 200
     else:
         log_event(f"Failed to scrape guc_data for user: {username}")
