@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install httpx httpx-ntlm redis cryptography beautifulsoup4 lxml python-dotenv requests
+          pip install httpx httpx-ntlm redis cryptography beautifulsoup4 lxml python-dotenv requests requests_ntlm
 
       - name: Run refresh_cache script
         env:
