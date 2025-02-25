@@ -1,9 +1,5 @@
 import sys
 import os
-
-# Ensure the project root is on the path so we can import from the api folder
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-
 import asyncio
 import json
 import traceback
@@ -14,6 +10,9 @@ from cryptography.fernet import Fernet
 import httpx
 from httpx_ntlm import HttpNtlmAuth
 from bs4 import BeautifulSoup
+
+# Ensure the project root is on the path so we can import from the api folder
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # Load environment variables from .env file
 load_dotenv()
@@ -92,7 +91,7 @@ def parse_notifications(html):
                     notif["email_time"] = email_time.isoformat()
                 except Exception as e:
                     print(
-                        f"Error parsing email_time '{email_time_str}': {e}. Using current time."
+                        f"{datetime.now().isoformat()} - Error parsing email_time '{email_time_str}': {e}. Using current time."
                     )
                     notif["email_time"] = datetime.now().isoformat()
                 notif["subject"] = (
@@ -113,7 +112,9 @@ def parse_notifications(html):
                 notif["body"] = ""
             notifications.append(notif)
     else:
-        print("Notifications table not found in the HTML.")
+        print(
+            f"{datetime.now().isoformat()} - Notifications table not found in the HTML."
+        )
     notifications.sort(key=lambda x: x["email_time"], reverse=True)
     return notifications
 
@@ -152,7 +153,9 @@ def refresh_cache():
         try:
             password = fernet.decrypt(encrypted_password.encode()).decode().strip()
         except Exception as e:
-            print(f"Error decrypting credentials for {username}: {e}")
+            print(
+                f"{datetime.now().isoformat()} - Error decrypting credentials for {username}: {e}"
+            )
             continue
 
         # --- guc_data refresh ---
@@ -167,10 +170,12 @@ def refresh_cache():
                 json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
             )
             print(
-                f"{datetime.now().isoformat()} - Cache refreshed for user: {username}"
+                f"{datetime.now().isoformat()} - GUC Data cache refresh for {username}: updated"
             )
         except Exception as e:
-            print(f"Error refreshing guc_data cache for {username}: {e}")
+            print(
+                f"{datetime.now().isoformat()} - GUC Data cache refresh for {username}: failed"
+            )
             traceback.print_exc()
 
         # --- schedule refresh ---
@@ -183,26 +188,34 @@ def refresh_cache():
             schedule_cache_key = f"schedule:{username}"
             redis_client.setex(
                 schedule_cache_key,
-                5184000,
+                5184000,  # 2 months in seconds (approximation)
                 json.dumps(schedule_result, ensure_ascii=False).encode("utf-8"),
             )
-            print(f"schedule cache refresh for {username}: updated")
+            print(
+                f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: updated"
+            )
         except Exception as e:
-            print(f"schedule cache refresh for {username}: failed")
+            print(
+                f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: failed"
+            )
             traceback.print_exc()
 
-        # --- cms refresh ---
+        # --- CMS refresh ---
         try:
             cms_result = asyncio.run(asyncio.to_thread(cms_scraper, username, password))
             cms_cache_key = f"cms:{username}"
             redis_client.setex(
                 cms_cache_key,
-                2592000,
+                2592000,  # 30 days in seconds (example)
                 json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
             )
-            print(f"cms cache refresh for {username}: updated")
+            print(
+                f"{datetime.now().isoformat()} - CMS cache refresh for {username}: updated"
+            )
         except Exception as e:
-            print(f"cms cache refresh for {username}: failed")
+            print(
+                f"{datetime.now().isoformat()} - CMS cache refresh for {username}: failed"
+            )
             traceback.print_exc()
 
         # --- grades refresh ---
@@ -216,9 +229,13 @@ def refresh_cache():
                 1500,
                 json.dumps(grades_result, ensure_ascii=False).encode("utf-8"),
             )
-            print(f"grades cache refresh for {username}: updated")
+            print(
+                f"{datetime.now().isoformat()} - Grades cache refresh for {username}: updated"
+            )
         except Exception as e:
-            print(f"grades cache refresh for {username}: failed")
+            print(
+                f"{datetime.now().isoformat()} - Grades cache refresh for {username}: failed"
+            )
             traceback.print_exc()
 
         # --- attendance refresh ---
@@ -239,9 +256,13 @@ def refresh_cache():
                 1500,
                 json.dumps(attendance_result, ensure_ascii=False).encode("utf-8"),
             )
-            print(f"attendance cache refresh for {username}: updated")
+            print(
+                f"{datetime.now().isoformat()} - Attendance cache refresh for {username}: updated"
+            )
         except Exception as e:
-            print(f"attendance cache refresh for {username}: failed")
+            print(
+                f"{datetime.now().isoformat()} - Attendance cache refresh for {username}: failed"
+            )
             traceback.print_exc()
 
 
