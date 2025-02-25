@@ -409,7 +409,7 @@ def scrape_schedule(username, password, base_schedule_url, max_retries, retry_de
 
 
 def fetch_cms_courses(session, username, cms_url, max_retries, retry_delay):
-    cache_key = f"cms_courses_{username}"
+    cache_key = f"cms:{username}"
     cached_data = get_from_app_cache(cache_key)
     if cached_data:
         print(f"Fetching CMS courses data from app cache for {username}")
@@ -698,7 +698,7 @@ def scrape_grades(username, password, max_retries=3, retry_delay=2):
     Caches the result in-memory.
     """
     grades_url = "https://apps.guc.edu.eg/student_ext/Grade/CheckGrade_01.aspx"
-    cache_key = f"grades_{username}"
+    cache_key = f"grades:{username}"
     cached_data = get_from_app_cache(cache_key)
     if cached_data:
         print(f"Fetching grades data from app cache for {username}")
@@ -824,7 +824,7 @@ def get_attendance(session, attendance_url, max_retries=3, retry_delay=2):
 def fetch_attendance_with_cache(
     session, base_attendance_url, username, max_retries, retry_delay
 ):
-    cache_key = f"attendance_{username}"
+    cache_key = f"attendance:{username}"
     cached_data = get_from_app_cache(cache_key)
     if cached_data:
         print(f"Fetching attendance data from cache for {username}")
