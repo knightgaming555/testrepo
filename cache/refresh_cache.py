@@ -1,8 +1,13 @@
+import sys
+import os
+
+# Ensure the project root is on the path so we can import from the api folder
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 import asyncio
 import json
 import traceback
 from datetime import datetime
-import os
 import redis
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
@@ -10,7 +15,7 @@ import httpx
 from httpx_ntlm import HttpNtlmAuth
 from bs4 import BeautifulSoup
 
-# Load environment variables from .env file (or GitHub Action secrets)
+# Load environment variables from .env file
 load_dotenv()
 
 REDIS_URL = os.environ.get("REDIS_URL")
@@ -22,15 +27,25 @@ if not REDIS_URL or not ENCRYPTION_KEY:
 redis_client = redis.from_url(REDIS_URL)
 fernet = Fernet(ENCRYPTION_KEY)
 
-# Configuration for scraping
+# Configuration for guc_data scraping
 GUC_DATA_URLS = [
     "https://apps.guc.edu.eg/student_ext/index.aspx",
     "https://apps.guc.edu.eg/student_ext/Main/Notifications.aspx",
 ]
 DOMAIN = "GUC"  # assumed constant
 
+# Configuration for schedule and attendance scraping
+BASE_SCHEDULE_URL_CONFIG = os.environ.get(
+    "BASE_SCHEDULE_URL",
+    "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx",
+)
+BASE_ATTENDANCE_URL_CONFIG = os.environ.get(
+    "BASE_ATTENDANCE_URL",
+    "https://apps.guc.edu.eg/student_ext/Attendance/ClassAttendance_ViewStudentAttendance_001.aspx",
+)
 
-# --- HTML Parsing Functions ---
+
+# --- HTML Parsing Functions for guc_data ---
 def parse_student_info(html):
     soup = BeautifulSoup(html, "lxml")
     info = {}
@@ -103,8 +118,9 @@ def parse_notifications(html):
     return notifications
 
 
-# --- Asynchronous Scraping Function ---
+# --- Asynchronous Scraping Function for guc_data ---
 async def async_scrape_guc_data_fast(username, password, urls):
+    # Use the correct NTLM auth from httpx_ntlm
     auth = HttpNtlmAuth(f"{DOMAIN}\\{username}", password)
     async with httpx.AsyncClient(auth=auth, timeout=10.0) as client:
         tasks = [client.get(url) for url in urls]
@@ -117,12 +133,19 @@ async def async_scrape_guc_data_fast(username, password, urls):
     return {"notifications": notifications, "student_info": student_info}
 
 
+# --- Import the additional scraping functions from api.scraping ---
+from api.scraping import (
+    scrape_schedule,
+    cms_scraper,
+    scrape_grades,
+    scrape_attendance,
+)
+
+
 # --- Cache Refresh Logic ---
 def refresh_cache():
     print(f"{datetime.now().isoformat()} - Starting cache refresh for all users...")
-    stored_users = redis_client.hgetall(
-        "user_credentials"
-    )  # {username: encrypted_password, ...}
+    stored_users = redis_client.hgetall("user_credentials")
     for username_bytes, encrypted_password_bytes in stored_users.items():
         username = username_bytes.decode()
         encrypted_password = encrypted_password_bytes.decode()
@@ -132,22 +155,93 @@ def refresh_cache():
             print(f"Error decrypting credentials for {username}: {e}")
             continue
 
+        # --- guc_data refresh ---
         try:
             scrape_result = asyncio.run(
                 async_scrape_guc_data_fast(username, password, GUC_DATA_URLS)
             )
             cache_key = f"guc_data:{username}"
-            # Cache for 10 minutes (600 seconds)
             redis_client.setex(
                 cache_key,
-                900,
+                1500,
                 json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
             )
             print(
                 f"{datetime.now().isoformat()} - Cache refreshed for user: {username}"
             )
         except Exception as e:
-            print(f"Error refreshing cache for {username}: {e}")
+            print(f"Error refreshing guc_data cache for {username}: {e}")
+            traceback.print_exc()
+
+        # --- schedule refresh ---
+        try:
+            schedule_result = asyncio.run(
+                asyncio.to_thread(
+                    scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG, 3, 2
+                )
+            )
+            schedule_cache_key = f"schedule:{username}"
+            redis_client.setex(
+                schedule_cache_key,
+                1500,
+                json.dumps(schedule_result, ensure_ascii=False).encode("utf-8"),
+            )
+            print(f"schedule cache refresh for {username}: updated")
+        except Exception as e:
+            print(f"schedule cache refresh for {username}: failed")
+            traceback.print_exc()
+
+        # --- cms refresh ---
+        try:
+            cms_result = asyncio.run(asyncio.to_thread(cms_scraper, username, password))
+            cms_cache_key = f"cms:{username}"
+            redis_client.setex(
+                cms_cache_key,
+                1500,
+                json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
+            )
+            print(f"cms cache refresh for {username}: updated")
+        except Exception as e:
+            print(f"cms cache refresh for {username}: failed")
+            traceback.print_exc()
+
+        # --- grades refresh ---
+        try:
+            grades_result = asyncio.run(
+                asyncio.to_thread(scrape_grades, username, password)
+            )
+            grades_cache_key = f"grades:{username}"
+            redis_client.setex(
+                grades_cache_key,
+                1500,
+                json.dumps(grades_result, ensure_ascii=False).encode("utf-8"),
+            )
+            print(f"grades cache refresh for {username}: updated")
+        except Exception as e:
+            print(f"grades cache refresh for {username}: failed")
+            traceback.print_exc()
+
+        # --- attendance refresh ---
+        try:
+            attendance_result = asyncio.run(
+                asyncio.to_thread(
+                    scrape_attendance,
+                    username,
+                    password,
+                    BASE_ATTENDANCE_URL_CONFIG,
+                    3,
+                    2,
+                )
+            )
+            attendance_cache_key = f"attendance:{username}"
+            redis_client.setex(
+                attendance_cache_key,
+                1500,
+                json.dumps(attendance_result, ensure_ascii=False).encode("utf-8"),
+            )
+            print(f"attendance cache refresh for {username}: updated")
+        except Exception as e:
+            print(f"attendance cache refresh for {username}: failed")
             traceback.print_exc()
 
 
