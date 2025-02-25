@@ -183,7 +183,7 @@ def refresh_cache():
             schedule_cache_key = f"schedule:{username}"
             redis_client.setex(
                 schedule_cache_key,
-                1500,
+                5184000,
                 json.dumps(schedule_result, ensure_ascii=False).encode("utf-8"),
             )
             print(f"schedule cache refresh for {username}: updated")
@@ -197,7 +197,7 @@ def refresh_cache():
             cms_cache_key = f"cms:{username}"
             redis_client.setex(
                 cms_cache_key,
-                1500,
+                2592000,
                 json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
             )
             print(f"cms cache refresh for {username}: updated")
