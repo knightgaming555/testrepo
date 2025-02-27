@@ -4,6 +4,7 @@ import asyncio
 import json
 import traceback
 import time
+import re
 from datetime import datetime
 import redis
 from dotenv import load_dotenv
@@ -348,6 +349,7 @@ def parse_attendance_course(soup):
     Extracts the attendance table directly from a course-specific POST response.
     Returns a list of attendance records for that course.
     """
+    print("Parsing attendance table for a course...")
     attendance_table = soup.find("table", id="DG_StudentCourseAttendance")
     if attendance_table:
         course_attendance = []
@@ -355,8 +357,10 @@ def parse_attendance_course(soup):
             cells = row.find_all("td")
             if len(cells) >= 3:
                 try:
-                    status = cells[1].text.strip() or None
-                    session_desc = cells[2].text.strip() or None
+                    status = cells[1].text.strip() if cells[1].text.strip() else None
+                    session_desc = (
+                        cells[2].text.strip() if cells[2].text.strip() else None
+                    )
                     course_attendance.append(
                         {"status": status, "session": session_desc}
                     )
@@ -395,6 +399,7 @@ def make_request(
 def get_attendance(session, attendance_url, max_retries=3, retry_delay=2):
     """
     Sequentially fetches and parses attendance data for each course.
+    This version closely follows the original working logic but always adds an entry for every course.
     """
     try:
         # First, get the full attendance page
@@ -413,7 +418,7 @@ def get_attendance(session, attendance_url, max_retries=3, retry_delay=2):
             "select", id="ContentPlaceHolderright_ContentPlaceHoldercontent_DDL_Courses"
         )
         if course_dropdown:
-            # Extract hidden form fields from the GET response
+            # Extract the hidden form fields from the GET response
             viewstate = soup.find("input", {"name": "__VIEWSTATE"})
             viewstate_gen = soup.find("input", {"name": "__VIEWSTATEGENERATOR"})
             event_validation = soup.find("input", {"name": "__EVENTVALIDATION"})
@@ -454,7 +459,7 @@ def get_attendance(session, attendance_url, max_retries=3, retry_delay=2):
                 if course_response:
                     course_soup = BeautifulSoup(course_response.content, "lxml")
                     course_attendance = parse_attendance_course(course_soup)
-                    # Always add an entry—even if course_attendance is None, use an empty list.
+                    # Always add an entry—even if course_attendance is None or empty, use an empty list.
                     attendance_data_all_courses[course_name] = course_attendance or []
             return attendance_data_all_courses
         else:
@@ -465,15 +470,14 @@ def get_attendance(session, attendance_url, max_retries=3, retry_delay=2):
         return None
 
 
-def extract_v_param(html):
+def extract_v_param(text):
     """
-    Dummy implementation to extract the 'v' parameter from the attendance page HTML.
-    Replace this logic with the actual extraction method as needed.
+    Extract the dynamic 'v' parameter from a page's text.
+    This implementation uses a regex to search for the pattern sTo('...').
     """
-    soup = BeautifulSoup(html, "lxml")
-    v_input = soup.find("input", {"name": "v"})
-    if v_input and v_input.get("value"):
-        return v_input["value"]
+    match = re.search(r"sTo\('(.+?)'\)", text)
+    if match:
+        return match.group(1)
     return None
 
 
@@ -481,6 +485,7 @@ def fetch_attendance(session, base_attendance_url, username, max_retries, retry_
     """
     Fetches attendance data without using a local cache.
     """
+    print(f"Fetching attendance for user '{username}' from {base_attendance_url}")
     response = make_request(
         session,
         base_attendance_url,
@@ -489,16 +494,21 @@ def fetch_attendance(session, base_attendance_url, username, max_retries, retry_
         timeout=10,
     )
     if not response:
+        print("Failed to fetch the base attendance page.")
         return None
 
     v_param = extract_v_param(response.text)
     if v_param:
+        print(f"Extracted 'v' parameter: {v_param}")
         attendance_url = urljoin(base_attendance_url, f"?v={v_param}")
         attendance_data = get_attendance(
             session, attendance_url, max_retries, retry_delay
         )
+        print(f"Attendance data for user '{username}': {attendance_data}")
         return attendance_data
-    return None
+    else:
+        print("The 'v' parameter was not found in the attendance page.")
+        return None
 
 
 def scrape_attendance(
@@ -506,14 +516,18 @@ def scrape_attendance(
 ):
     """
     Main function to scrape attendance data for a user.
-    Always scrapes fresh data.
     """
+    print(
+        f"Starting attendance scraping for user '{username}' using URL {base_attendance_url}"
+    )
     session = requests.Session()
     # Use synchronous NTLM auth for attendance scraping
     session.auth = HttpNtlmAuthSync(f"{DOMAIN}\\{username}", password)
-    return fetch_attendance(
+    attendance_data = fetch_attendance(
         session, base_attendance_url, username, max_retries, retry_delay
     )
+    print(f"Final attendance data for user '{username}': {attendance_data}")
+    return attendance_data
 
 
 # --- Cache Refresh Logic ---
@@ -622,6 +636,9 @@ def refresh_cache():
                     3,
                     2,
                 )
+            )
+            print(
+                f"Attendance result for user '{username}': {json.dumps(attendance_result, ensure_ascii=False)}"
             )
             attendance_cache_key = f"attendance:{username}"
             redis_client.setex(
