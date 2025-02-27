@@ -39,7 +39,7 @@ def get_from_app_cache(key):
     return None
 
 
-def set_to_app_cache(key, value, timeout=500):
+def set_to_app_cache(key, value, timeout=1500):
     try:
         redis_client.setex(key, timeout, json.dumps(value))
     except Exception as e:
