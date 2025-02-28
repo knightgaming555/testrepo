@@ -21,6 +21,7 @@
     { "src": "/api/guc_data", "dest": "api/guc_data.py" },
     { "src": "/api/schedule", "dest": "api/schedule.py" },
     { "src": "/api/cms_data", "dest": "api/cms_data.py" },
+    { "src": "/api/cms_notifications", "dest": "api/cms_data.py" },
     { "src": "/api/cms_content", "dest": "api/cms_content.py" },
     { "src": "/api/grades", "dest": "api/grades.py" },
     { "src": "/api/attendance", "dest": "api/attendance.py" },
