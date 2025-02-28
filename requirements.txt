@@ -9,3 +9,5 @@ selectolax
 lxml
 redis
 pycurl
+httpx
+httpx-ntlm
