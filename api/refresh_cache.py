@@ -45,7 +45,7 @@ from cache.refresh_cache import (
     scrape_attendance,
     scrape_grades,
 )
-from schedule import scrape_schedule
+from api.schedule import scrape_schedule
 from api.scraping import (
     cms_scraper,
     scrape_exam_seats,
