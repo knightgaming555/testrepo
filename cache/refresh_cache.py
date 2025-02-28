@@ -144,6 +144,8 @@ async def async_scrape_guc_data_fast(username, password, urls):
     return {"notifications": notifications, "student_info": student_info}
 
 
+__all__ = ["async_scrape_guc_data_fast"]
+
 # --- Import additional scraping functions for schedule and CMS ---
 from api.scraping import scrape_schedule, cms_scraper
 
