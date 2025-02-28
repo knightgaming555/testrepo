@@ -12,7 +12,7 @@
     { "src": "api/refresh_cache.py", "use": "@vercel/python" },
     { "src": "api/proxy.py", "use": "@vercel/python" },
     { "src": "api/announcements.py", "use": "@vercel/python" },
-    { "src": "api/cms_notifications.py", "use": "@vercel/python" },
+    
     { "src": "api/app.py", "use": "@vercel/python" }
     
   ],
@@ -28,7 +28,7 @@
     { "src": "/api/refresh_cache", "dest": "api/refresh_cache.py" },
     { "src": "/api/proxy", "dest": "api/proxy.py" },
     { "src": "/api/announcements", "dest": "api/announcements.py" },
-    { "src": "/api/cms_notifications", "dest": "api/cms_notifications.py" },
+    
     {  "src": "/(.*)", "dest": "api/app.py" }
     
   ]
