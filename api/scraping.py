@@ -83,7 +83,7 @@ def make_request(
 
 
 def extract_v_param(text):
-    """Extract the dynamic 'v' parameter from a page’s text."""
+    """Extract the dynamic 'v' parameter from a page's text."""
     match = re.search(r"sTo\('(.+?)'\)", text)
     if match:
         return match.group(1)
@@ -994,3 +994,79 @@ def scrape_course_announcements(
         error_message = f"Error scraping course announcements from {course_url}: {e}"
         print(error_message)
         return {"course_url": course_url, "error": error_message}
+
+
+def scrape_notifications(username, password, max_retries=3, retry_delay=2):
+    """
+    Scrapes notifications from the GUC CMS homepage.
+
+    Args:
+        username (str): GUC username
+        password (str): GUC password
+        max_retries (int): Maximum number of retries for network requests
+        retry_delay (int): Delay in seconds between retries
+
+    Returns:
+        list: A list of notification dictionaries containing notification details
+    """
+    session = requests.Session()
+    session.auth = HttpNtlmAuth(username, password)
+
+    try:
+        print(f"Fetching homepage for notifications")
+        response = make_request(
+            session,
+            "https://cms.guc.edu.eg/apps/student/HomePageStn.aspx",
+            method="GET",
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+            timeout=10,
+        )
+        if not response:
+            print("Failed to fetch homepage for notifications")
+            return None
+
+        soup = BeautifulSoup(response.content, "html.parser")
+        notifications = []
+
+        # Find all notification elements
+        notification_elements = soup.find_all("div", class_="vertical-timeline-element")
+
+        for element in notification_elements:
+            try:
+                # Extract notification details
+                title = element.find("h4", class_="timeline-title").text.strip()
+                content = element.find("p").text.strip()
+                date = element.find(
+                    "span", class_="vertical-timeline-element-date"
+                ).text.strip()
+
+                # Extract notification type from badge color
+                badge = element.find("i", class_="badge-dot")
+                notification_type = "info"
+                if "badge-danger" in badge.get("class", []):
+                    notification_type = "danger"
+                elif "badge-success" in badge.get("class", []):
+                    notification_type = "success"
+                elif "badge-warning" in badge.get("class", []):
+                    notification_type = "warning"
+
+                notifications.append(
+                    {
+                        "title": title,
+                        "content": content,
+                        "date": date,
+                        "type": notification_type,
+                    }
+                )
+            except Exception as e:
+                print(f"Error parsing notification element: {e}")
+                continue
+
+        print(f"Successfully scraped {len(notifications)} notifications")
+        return notifications
+
+    except Exception as e:
+        error_message = f"Error scraping notifications: {e}"
+        print(error_message)
+        return None
