@@ -201,7 +201,7 @@ def scrape_schedule(username, password, base_url):
             schedule_url = f"{base_url}?v={v_parameter_value}"
             schedule_res = session.get(schedule_url, timeout=10, verify=False)
             scraped = parse_schedule_bs4(schedule_res.text)
-            return (scraped, perf_counter() - start)
+            return scraped
     except Exception as e:
         return {"error": str(e)}, perf_counter() - start
 
