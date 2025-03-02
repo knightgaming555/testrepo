@@ -29,7 +29,7 @@
     { "src": "/api/refresh_cache", "dest": "api/refresh_cache.py" },
     { "src": "/api/proxy", "dest": "api/proxy.py" },
     { "src": "/api/announcements", "dest": "api/announcements.py" },
-    
+    { "src": "/api/extract", "dest": "api/proxy.py" },
     {  "src": "/(.*)", "dest": "api/app.py" }
     
   ]
