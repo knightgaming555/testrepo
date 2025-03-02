@@ -11,3 +11,4 @@ redis
 pycurl
 httpx
 httpx-ntlm
+PyPDF2
