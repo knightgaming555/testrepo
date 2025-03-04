@@ -4,12 +4,12 @@ from requests_ntlm import HttpNtlmAuth
 from io import BytesIO
 import re
 import concurrent.futures
-import PyPDF2  # Lightweight alternative to fitz
+import PyPDF2  # Lightweight PDF extractor
 
 app = Flask(__name__)
 
-# Set your OCR.space API key here.
-OCR_API_KEY = "K85557323988957"  # Replace with your actual key
+# Set your OCR.space API key here (unused now)
+OCR_API_KEY = "K85557323988957"  # Replace with your actual key if needed
 
 
 @app.route("/api/proxy", methods=["GET"])
@@ -54,78 +54,77 @@ def extract_text():
             400, "Missing one or more required parameters: username, password, fileUrl"
         )
     try:
+        print("Fetching file from URL:", file_url)
         response = requests.get(file_url, auth=HttpNtlmAuth(username, password))
         if response.status_code != 200:
             abort(response.status_code, f"Error from CMS server: {response.text}")
-        pdf_bytes = BytesIO(response.content)
-        pdf_bytes.seek(0)
-        reader = PyPDF2.PdfReader(pdf_bytes)
-        num_pages = len(reader.pages)
+        content = response.content
+        # Determine file type by extension (lowercase)
+        file_extension = file_url.split("/")[-1].split(".")[-1].lower()
+        print("File extension detected:", file_extension)
+        extracted_text = ""
+        if file_extension == "pdf":
+            print("Extracting text from PDF using PyPDF2...")
+            pdf_bytes = BytesIO(content)
+            pdf_bytes.seek(0)
+            try:
+                reader = PyPDF2.PdfReader(pdf_bytes)
+                num_pages = len(reader.pages)
+                print("Number of pages:", num_pages)
 
-        first_page = reader.pages[0]
-        first_page_text = first_page.extract_text() or ""
-        if first_page_text.strip():
+                def extract_page_text(page, page_num):
+                    text = page.extract_text() or ""
+                    print(
+                        f"Extracted text from page {page_num}: {len(text)} characters"
+                    )
+                    return text
 
-            def extract_page_text(page, page_num):
-                return page.extract_text() or ""
+                with concurrent.futures.ThreadPoolExecutor(
+                    max_workers=num_pages
+                ) as executor:
+                    future_to_index = {
+                        executor.submit(extract_page_text, reader.pages[i], i + 1): i
+                        for i in range(num_pages)
+                    }
+                    results = ["" for _ in range(num_pages)]
+                    for future in concurrent.futures.as_completed(future_to_index):
+                        index = future_to_index[future]
+                        results[index] = future.result()
+                extracted_text = "\n".join(results)
+            except Exception as e:
+                print("PyPDF2 extraction failed with error:", e)
+                print("Falling back to pdfminer.six for extraction...")
+                from pdfminer.high_level import extract_text
 
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=num_pages
-            ) as executor:
-                future_to_index = {
-                    executor.submit(extract_page_text, reader.pages[i], i + 1): i
-                    for i in range(num_pages)
-                }
-                results = ["" for _ in range(num_pages)]
-                for future in concurrent.futures.as_completed(future_to_index):
-                    index = future_to_index[future]
-                    results[index] = future.result()
-            extracted_text = "\n".join(results)
+                pdf_bytes.seek(0)
+                extracted_text = extract_text(pdf_bytes)
+        elif file_extension == "docx":
+            print("Extracting text from DOCX using python-docx...")
+            import docx
+
+            doc = docx.Document(BytesIO(content))
+            paragraphs = [
+                para.text for para in doc.paragraphs if para.text.strip() != ""
+            ]
+            extracted_text = "\n".join(paragraphs)
+        elif file_extension == "pptx":
+            print("Extracting text from PPTX using python-pptx...")
+            from pptx import Presentation
+
+            prs = Presentation(BytesIO(content))
+            slides_text = []
+            for i, slide in enumerate(prs.slides, start=1):
+                slide_text = []
+                for shape in slide.shapes:
+                    if hasattr(shape, "text") and shape.text.strip():
+                        slide_text.append(shape.text)
+                slides_text.append("\n".join(slide_text))
+                print(f"Slide {i} text extracted.")
+            extracted_text = "\n".join(slides_text)
         else:
-
-            def ocr_page(page, page_num):
-                writer = PyPDF2.PdfWriter()
-                writer.add_page(page)
-                page_buffer = BytesIO()
-                writer.write(page_buffer)
-                page_buffer.seek(0)
-                files = {
-                    "file": (f"page_{page_num}.pdf", page_buffer, "application/pdf")
-                }
-                data = {
-                    "apikey": OCR_API_KEY,
-                    "OCREngine": "2",
-                    "scale": "true",
-                    "language": "eng",
-                    "detectOrientation": "true",
-                    "isOverlayRequired": "false",
-                }
-                ocr_response = requests.post(
-                    "https://api.ocr.space/parse/image", data=data, files=files
-                )
-                page_result = ocr_response.json()
-                if (
-                    page_result.get("ParsedResults")
-                    and len(page_result["ParsedResults"]) > 0
-                ):
-                    return page_result["ParsedResults"][0]["ParsedText"]
-                else:
-                    return ""
-
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=num_pages
-            ) as executor:
-                future_to_index = {
-                    executor.submit(ocr_page, reader.pages[i], i + 1): i
-                    for i in range(num_pages)
-                }
-                results = ["" for _ in range(num_pages)]
-                for future in concurrent.futures.as_completed(future_to_index):
-                    index = future_to_index[future]
-                    results[index] = future.result()
-            extracted_text = "\n".join(results)
-            extracted_text = extracted_text.replace("\f", "\n")
-            extracted_text = re.sub(r"\(cid:\d+\)", "", extracted_text)
+            print("Unsupported file type for extraction:", file_extension)
+            extracted_text = "Unsupported file type for extraction."
+        print("Extraction complete.")
         return jsonify({"text": extracted_text})
     except Exception as e:
         abort(500, f"Error extracting PDF text: {str(e)}")
