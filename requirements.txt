@@ -12,4 +12,3 @@ pycurl
 httpx
 httpx-ntlm
 PyPDF2
-fitz

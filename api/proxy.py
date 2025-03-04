@@ -3,9 +3,9 @@ import requests
 from requests_ntlm import HttpNtlmAuth
 from io import BytesIO
 import re
-import fitz  # PyMuPDF
 import logging
 import concurrent.futures
+import PyPDF2  # Lightweight alternative to fitz
 
 app = Flask(__name__)
 
@@ -79,39 +79,62 @@ def extract_text():
             abort(response.status_code, f"Error from CMS server: {response.text}")
 
         pdf_bytes = BytesIO(response.content)
-        logger.info("Opening PDF with PyMuPDF")
         pdf_bytes.seek(0)
-        doc = fitz.open(stream=pdf_bytes.read(), filetype="pdf")
-        logger.info("PDF opened successfully, number of pages: %d", doc.page_count)
-        extracted_text = ""
-        for i, page in enumerate(doc, start=1):
-            logger.debug("Extracting text from page %d", i)
-            page_text = page.get_text("text")
-            if page_text:
-                extracted_text += page_text + "\n"
+        reader = PyPDF2.PdfReader(pdf_bytes)
+        num_pages = len(reader.pages)
+        logger.info("PDF loaded successfully, number of pages: %d", num_pages)
 
-        # Cleanup common artifacts.
-        extracted_text = extracted_text.replace("\f", "\n")
-        extracted_text = re.sub(r"\(cid:\d+\)", "", extracted_text)
+        # Check first page for selectable text.
+        first_page = reader.pages[0]
+        first_page_text = first_page.extract_text() or ""
+        if first_page_text.strip():
+            logger.info("Selectable text found on first page; using text extraction")
 
-        if extracted_text.strip():
-            logger.info("Selectable text extracted successfully")
+            # Define a function to extract text concurrently.
+            def extract_page_text(page, page_num):
+                logger.debug("Extracting text from page %d", page_num)
+                return page.extract_text() or ""
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=num_pages
+            ) as executor:
+                future_to_index = {
+                    executor.submit(extract_page_text, reader.pages[i], i + 1): i
+                    for i in range(num_pages)
+                }
+                results = ["" for _ in range(num_pages)]
+                for future in concurrent.futures.as_completed(future_to_index):
+                    index = future_to_index[future]
+                    results[index] = future.result()
+            extracted_text = "\n".join(results)
         else:
             logger.info(
-                "No selectable text found; falling back to OCR.space per page concurrently"
+                "No selectable text on first page; falling back to OCR concurrently"
             )
 
-            # Function to perform OCR on a single page.
+            # Define a function to perform OCR on a single page by creating a one-page PDF.
             def ocr_page(page, page_num):
                 logger.debug("Performing OCR on page %d", page_num)
-                pix = page.get_pixmap()
-                img_data = pix.tobytes("png")
-                files = {"file": (f"page_{page_num}.png", img_data)}
+                writer = PyPDF2.PdfWriter()
+                writer.add_page(page)
+                page_buffer = BytesIO()
+                writer.write(page_buffer)
+                page_buffer.seek(0)
+                files = {
+                    "file": (f"page_{page_num}.pdf", page_buffer, "application/pdf")
+                }
+                # Additional parameters to potentially improve OCR accuracy.
                 data = {
                     "apikey": OCR_API_KEY,
                     "OCREngine": "2",
+                    "scale": "true",  # Upscale image before processing
+                    "language": "eng",  # Set expected language (change if needed)
+                    "detectOrientation": "true",  # Helps if the page is rotated
+                    "isOverlayRequired": "false",
                 }
-                logger.debug("Sending OCR request for page %d", page_num)
+                logger.debug(
+                    "Sending OCR request for page %d with data: %s", page_num, data
+                )
                 ocr_response = requests.post(
                     "https://api.ocr.space/parse/image", data=data, files=files
                 )
@@ -133,12 +156,21 @@ def extract_text():
                     logger.error("OCR.space extraction failed for page %d", page_num)
                     return ""
 
-            # Use a ThreadPoolExecutor to process OCR for all pages concurrently.
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                # Create a list of (page, page_num) tuples.
-                pages = [(page, i) for i, page in enumerate(doc, start=1)]
-                results = list(executor.map(lambda args: ocr_page(*args), pages))
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=num_pages
+            ) as executor:
+                future_to_index = {
+                    executor.submit(ocr_page, reader.pages[i], i + 1): i
+                    for i in range(num_pages)
+                }
+                results = ["" for _ in range(num_pages)]
+                for future in concurrent.futures.as_completed(future_to_index):
+                    index = future_to_index[future]
+                    results[index] = future.result()
             extracted_text = "\n".join(results)
+            # Cleanup common artifacts.
+            extracted_text = extracted_text.replace("\f", "\n")
+            extracted_text = re.sub(r"\(cid:\d+\)", "", extracted_text)
             logger.info("OCR completed on PDF with concurrent page-by-page requests")
 
         logger.debug("Extracted text length: %d characters", len(extracted_text))
