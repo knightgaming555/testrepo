@@ -139,7 +139,7 @@ def refresh_cache():
         elif section == "2":
             try:
                 cms_result = asyncio.run(
-                    asyncio.to_thread(cms_scraper, username, password)
+                    asyncio.to_thread(cms_scraper, username, password, None, 3, 2, True)
                 )
                 cms_cache_key = f"cms:{username}"
                 redis_client.setex(

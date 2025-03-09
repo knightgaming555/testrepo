@@ -1,0 +1,109 @@
+2025-03-07 14:09:12,787 [INFO] Starting CMS Content API
+2025-03-07 14:09:14,071 [INFO] Redis connection successful
+2025-03-07 14:09:14,071 [INFO] Encryption setup complete
+2025-03-07 14:09:14,082 [INFO] Starting Flask server
+2025-03-07 14:09:15,038 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.31:5000
+2025-03-07 14:09:15,039 [INFO] [33mPress CTRL+C to quit[0m
+2025-03-07 14:09:23,344 [INFO] 127.0.0.1 - - [07/Mar/2025 14:09:23] "[33mGET / HTTP/1.1[0m" 404 -
+2025-03-07 14:09:31,178 [INFO] Test form page requested
+2025-03-07 14:09:31,179 [INFO] 127.0.0.1 - - [07/Mar/2025 14:09:31] "GET /api/test_form HTTP/1.1" 200 -
+2025-03-07 14:09:46,734 [INFO] API request received: /api/cms_content
+2025-03-07 14:09:46,735 [INFO] Request parameters: username=mohamed.elsaadi, course_url=specified
+2025-03-07 14:09:46,960 [INFO] Starting content scraping
+2025-03-07 14:09:46,962 [INFO] Starting scraper for user: mohamed.elsaadi, course_url: specified
+2025-03-07 14:09:46,962 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:09:47,190 [INFO] Fetching course content from: https://cms.guc.edu.eg/apps/student/CourseViewStn?id=16&sid=65
+2025-03-07 14:09:48,550 [INFO] Found 5 week sections
+2025-03-07 14:11:20,476 [INFO] Starting CMS Content API
+2025-03-07 14:11:21,738 [INFO] Redis connection successful
+2025-03-07 14:11:21,738 [INFO] Encryption setup complete
+2025-03-07 14:11:21,740 [INFO] Starting Flask server
+2025-03-07 14:11:22,761 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.31:5000
+2025-03-07 14:11:22,761 [INFO] [33mPress CTRL+C to quit[0m
+2025-03-07 14:11:25,213 [INFO] Test form page requested
+2025-03-07 14:11:25,214 [INFO] 127.0.0.1 - - [07/Mar/2025 14:11:25] "GET /api/test_form HTTP/1.1" 200 -
+2025-03-07 14:11:30,677 [INFO] API request received: /api/cms_content
+2025-03-07 14:11:30,678 [INFO] Request parameters: username=mohamed.elsaadi, course_url: https://cms.guc.edu.eg/apps/st...
+2025-03-07 14:11:30,679 [INFO] Authenticating user: mohamed.elsaadi
+2025-03-07 14:11:30,680 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:11:32,680 [INFO] Authentication successful
+2025-03-07 14:11:32,680 [INFO] Starting content scraping
+2025-03-07 14:11:32,680 [INFO] Starting scraper for user: mohamed.elsaadi, course_url: specified
+2025-03-07 14:11:32,680 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:11:32,896 [INFO] Fetching course content from: https://cms.guc.edu.eg/apps/student/CourseViewStn?id=16&sid=65
+2025-03-07 14:11:33,910 [INFO] Starting HTML content parsing
+2025-03-07 14:11:33,910 [INFO] Found 5 week sections
+2025-03-07 14:11:33,910 [INFO] Processing week section 1/5
+2025-03-07 14:11:33,910 [INFO] Processing week section 2/5
+2025-03-07 14:11:33,910 [INFO] Processing week section 3/5
+2025-03-07 14:11:33,910 [INFO] Processing week section 4/5
+2025-03-07 14:11:33,920 [INFO] Processing week section 5/5
+2025-03-07 14:11:33,921 [INFO] Parsing complete: 5 weeks processed
+2025-03-07 14:11:34,271 [INFO] Request completed in 3.59 seconds
+2025-03-07 14:11:34,271 [INFO] 127.0.0.1 - - [07/Mar/2025 14:11:34] "GET /api/cms_content?username=mohamed.elsaadi&password=Messo@1245&course_url=https://cms.guc.edu.eg/apps/student/CourseViewStn?id%3D16%26sid%3D65 HTTP/1.1" 200 -
+2025-03-07 14:13:47,687 [INFO] API request received: /api/cms_content
+2025-03-07 14:13:47,688 [INFO] Request parameters: username=mohamed.elsaadi, course_url: https://cms.guc.edu.eg/apps/st...
+2025-03-07 14:13:47,688 [INFO] Authenticating user: mohamed.elsaadi
+2025-03-07 14:13:47,689 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:13:49,578 [INFO] Authentication successful
+2025-03-07 14:13:49,580 [INFO] Starting content scraping
+2025-03-07 14:13:49,580 [INFO] Starting scraper for user: mohamed.elsaadi, course_url: specified
+2025-03-07 14:13:49,581 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:13:49,788 [INFO] Returning cached course content
+2025-03-07 14:13:49,788 [INFO] Request completed in 2.10 seconds
+2025-03-07 14:13:49,788 [INFO] 127.0.0.1 - - [07/Mar/2025 14:13:49] "GET /api/cms_content?username=mohamed.elsaadi&password=Messo@1245&course_url=https://cms.guc.edu.eg/apps/student/CourseViewStn?id%3D16%26sid%3D65 HTTP/1.1" 200 -
+2025-03-07 14:14:11,060 [INFO] API request received: /api/cms_content
+2025-03-07 14:14:11,061 [INFO] Request parameters: username=mohamed.elsaadi, course_url: https://cms.guc.edu.eg/apps/st...
+2025-03-07 14:14:11,061 [INFO] Authenticating user: mohamed.elsaadi
+2025-03-07 14:14:11,062 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:14:13,012 [INFO] Authentication successful
+2025-03-07 14:14:13,014 [INFO] Starting content scraping
+2025-03-07 14:14:13,014 [INFO] Starting scraper for user: mohamed.elsaadi, course_url: specified
+2025-03-07 14:14:13,014 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:14:13,220 [INFO] Returning cached course content
+2025-03-07 14:14:13,221 [INFO] Request completed in 2.16 seconds
+2025-03-07 14:14:13,222 [INFO] 127.0.0.1 - - [07/Mar/2025 14:14:13] "GET /api/cms_content?username=mohamed.elsaadi&password=Messo@1245&course_url=https://cms.guc.edu.eg/apps/student/CourseViewStn?id%3D16%26sid%3D65 HTTP/1.1" 200 -
+2025-03-07 14:14:20,133 [INFO] Starting CMS Content API
+2025-03-07 14:14:21,289 [INFO] Redis connection successful
+2025-03-07 14:14:21,289 [INFO] Encryption setup complete
+2025-03-07 14:14:21,294 [INFO] Starting Flask server
+2025-03-07 14:14:22,190 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.31:5000
+2025-03-07 14:14:22,191 [INFO] [33mPress CTRL+C to quit[0m
+2025-03-07 14:14:34,505 [INFO] Starting CMS Content API
+2025-03-07 14:14:35,572 [INFO] Redis connection successful
+2025-03-07 14:14:35,572 [INFO] Encryption setup complete
+2025-03-07 14:14:35,578 [INFO] Starting Flask server
+2025-03-07 14:14:36,474 [INFO] [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.31:5000
+2025-03-07 14:14:36,475 [INFO] [33mPress CTRL+C to quit[0m
+2025-03-07 14:14:36,493 [INFO]  * Restarting with watchdog (windowsapi)
+2025-03-07 14:14:37,409 [INFO] Starting CMS Content API
+2025-03-07 14:14:38,470 [INFO] Redis connection successful
+2025-03-07 14:14:38,488 [INFO] Encryption setup complete
+2025-03-07 14:14:38,490 [INFO] Starting Flask server
+2025-03-07 14:14:38,526 [WARNING]  * Debugger is active!
+2025-03-07 14:14:38,532 [INFO]  * Debugger PIN: 518-117-719
+2025-03-07 14:14:41,471 [INFO] API request received: /api/cms_content
+2025-03-07 14:14:41,472 [INFO] Request parameters: username=mohamed.elsaadi, course_url: https://cms.guc.edu.eg/apps/st...
+2025-03-07 14:14:41,472 [INFO] Authenticating user: mohamed.elsaadi
+2025-03-07 14:14:41,473 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:14:43,550 [INFO] Authentication successful
+2025-03-07 14:14:43,550 [INFO] Starting content scraping
+2025-03-07 14:14:43,550 [INFO] Starting scraper for user: mohamed.elsaadi, course_url: specified
+2025-03-07 14:14:43,560 [INFO] Creating session for user: mohamed.elsaadi
+2025-03-07 14:14:43,560 [INFO] Fetching course content from: https://cms.guc.edu.eg/apps/student/CourseViewStn?id=16&sid=65
+2025-03-07 14:14:44,760 [INFO] Starting HTML content parsing
+2025-03-07 14:14:44,771 [INFO] Found 5 week sections
+2025-03-07 14:14:44,771 [INFO] Processing week section 1/5
+2025-03-07 14:14:44,771 [INFO] Processing week section 2/5

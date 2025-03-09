@@ -7,6 +7,7 @@ import hashlib
 import traceback
 from datetime import datetime
 from urllib.parse import urljoin
+import logging
 
 import requests
 from requests_ntlm import HttpNtlmAuth
@@ -19,6 +20,9 @@ from requests.adapters import HTTPAdapter
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Set up proper logging
+logger = logging.getLogger("scraping")
 
 # -------------------------------
 # Caching and Utility Functions
@@ -95,25 +99,104 @@ def extract_v_param(text):
 # -------------------------------
 
 
-def authenticate_user(username, password):
+def authenticate_user(username, password, initial_retry_delay=2, max_retries=2):
+    """
+    Authenticate a user directly with the university server.
+    Does NOT check against Redis stored credentials.
+
+    Parameters:
+    - username: User's university ID
+    - password: User's password
+    - initial_retry_delay: Initial seconds to wait between retries (default: 2)
+    - max_retries: Maximum number of retry attempts (default: 2)
+
+    Returns:
+    - Boolean indicating if authentication was successful
+    """
     index_url = "https://apps.guc.edu.eg/student_ext/index.aspx"
-    try:
-        with requests.Session() as session:
-            session.auth = HttpNtlmAuth(username, password)
-            response = make_request(
-                session, index_url, max_retries=3, retry_delay=2, timeout=10
-            )
-            if response and ("Welcome" in response.text or response.status_code == 200):
-                print("Auth Success")
-                return True
-            else:
-                print(
-                    f"Auth failed: {response.status_code if response else 'No Response'}"
-                )
+
+    # Create session with a shorter timeout
+    with requests.Session() as session:
+        session.auth = HttpNtlmAuth(username, password)
+
+        # Direct authentication with university server - no Redis check
+        try:
+            print(f"Sending authentication request to university server for {username}")
+            response = session.get(index_url, timeout=5)
+
+            # If we get a 401 on the first try, credentials are definitely wrong
+            if response.status_code == 401:
+                print(f"University server returned 401 Unauthorized for {username}")
+                if logger:
+                    logger.warning(
+                        f"Authentication failed: University server rejected credentials for {username}"
+                    )
                 return False
-    except Exception as e:
-        print(f"Error during authentication: {e}")
-        return False
+
+            # If we get a success response immediately, return True
+            if response.status_code == 200 and ("Welcome" in response.text):
+                print(f"University server accepted credentials for {username}")
+                if logger:
+                    logger.info(f"Authentication succeeded for {username}")
+                return True
+
+        except requests.exceptions.RequestException as e:
+            print(f"Network error during initial authentication: {str(e)}")
+            if logger:
+                logger.info(f"Initial connection attempt had error: {str(e)}")
+            # Continue to retry logic
+
+        # Only make additional attempts if the first wasn't clearly successful or failed
+        for attempt in range(1, max_retries + 1):
+            try:
+                print(f"Retry {attempt}/{max_retries} for {username}")
+                response = make_request(
+                    session,
+                    index_url,
+                    max_retries=1,
+                    retry_delay=initial_retry_delay,
+                    timeout=5,
+                )
+
+                if response and (
+                    "Welcome" in response.text or response.status_code == 200
+                ):
+                    print(f"Retry {attempt} successful for {username}")
+                    if logger:
+                        logger.info(
+                            f"Authentication successful on retry {attempt} for {username}"
+                        )
+                    return True
+                else:
+                    status = response.status_code if response else "No Response"
+                    # If we get another 401, immediately return False
+                    if status == 401:
+                        print(
+                            f"Retry {attempt} received 401 Unauthorized for {username}"
+                        )
+                        if logger:
+                            logger.warning(
+                                f"Authentication retry failed with 401 for {username}"
+                            )
+                        return False
+
+                    print(f"Retry {attempt} failed with status {status} for {username}")
+                    if logger:
+                        logger.warning(f"Auth attempt {attempt} failed: {status}")
+
+            except Exception as e:
+                print(f"Error during retry {attempt}: {str(e)}")
+                if logger:
+                    logger.warning(f"Authentication retry {attempt} failed: {str(e)}")
+
+            # Only sleep if we're going to try again
+            if attempt < max_retries:
+                time.sleep(initial_retry_delay)
+
+    print(f"All authentication attempts failed for {username}")
+    if logger:
+        logger.error(f"Authentication failed after all attempts for {username}")
+    return False
 
 
 def get_notifications(soup):
@@ -408,9 +491,11 @@ def scrape_schedule(username, password, base_schedule_url, max_retries, retry_de
 # -------------------------------
 
 
-def fetch_cms_courses(session, username, cms_url, max_retries, retry_delay):
+def fetch_cms_courses(
+    session, username, cms_url, max_retries, retry_delay, force_refresh=False
+):
     cache_key = f"cms:{username}"
-    cached_data = get_from_app_cache(cache_key)
+    cached_data = None if force_refresh else get_from_app_cache(cache_key)
     if cached_data:
         print(f"Fetching CMS courses data from app cache for {username}")
         return cached_data
@@ -432,8 +517,15 @@ def fetch_cms_courses(session, username, cms_url, max_retries, retry_delay):
                 course_name = cells[1].text.strip()
                 course_id = cells[4].text.strip()
                 season_id = cells[5].text.strip()
+                season_name = cells[3].text.strip()
                 course_url = f"https://cms.guc.edu.eg/apps/student/CourseViewStn.aspx?id={course_id}&sid={season_id}"
-                courses.append({"course_name": course_name, "course_url": course_url})
+                courses.append(
+                    {
+                        "course_name": course_name,
+                        "course_url": course_url,
+                        "season_name": season_name,
+                    }
+                )
     else:
         print(f"CMS courses table not found for URL: {cms_url}")
     if courses:
@@ -494,21 +586,33 @@ def get_course_content_data(session, course_url):
         return None
 
 
-def cms_scraper(username, password, course_url=None, max_retries=3, retry_delay=2):
+def cms_scraper(
+    username,
+    password,
+    course_url=None,
+    max_retries=3,
+    retry_delay=2,
+    force_refresh=False,
+):
     """
     Main function to scrape CMS data.
     If course_url is provided, fetch content for that course.
     Otherwise, fetch all courses from the CMS home page.
+
+    If force_refresh is True, ignores cached data and fetches fresh data.
     """
     cms_url = "https://cms.guc.edu.eg/apps/student/HomePageStn"
     session = requests.Session()
     session.auth = HttpNtlmAuth(username, password)
     if course_url:
         print(f"Fetching specific CMS content from: {course_url}")
+        # For course content, we could add force_refresh here too if needed
         return get_course_content_data(session, course_url)
     else:
         print("Fetching all CMS courses data")
-        return fetch_cms_courses(session, username, cms_url, max_retries, retry_delay)
+        return fetch_cms_courses(
+            session, username, cms_url, max_retries, retry_delay, force_refresh
+        )
 
 
 # -------------------------------
