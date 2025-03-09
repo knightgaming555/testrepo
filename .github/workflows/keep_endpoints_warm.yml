@@ -2,7 +2,7 @@ name: Keep Endpoints Warm
 
 on:
   schedule:
-    - cron: "*/5 * * * *" # runs every 5 minutes
+    # runs every 5 minutes
   workflow_dispatch: # Allows you to trigger it manually
 
 jobs:
