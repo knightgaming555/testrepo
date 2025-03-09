@@ -1,0 +1,18 @@
+stages:
+  - refresh
+
+refresh_cache:
+  stage: refresh
+  image: python:3.9
+  script:
+    - python -m pip install --upgrade pip
+    - pip install httpx httpx-ntlm redis cryptography beautifulsoup4 lxml python-dotenv requests requests_ntlm selectolax Flask flask-cors pycurl
+    - python cache/refresh_cache.py
+  environment:
+    name: production
+  variables:
+    REDIS_URL: ${REDIS_URL}
+    ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
