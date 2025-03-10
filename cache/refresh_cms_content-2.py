@@ -3,6 +3,7 @@ import hashlib
 import pickle
 import logging
 import json
+import sys
 import requests
 from urllib.parse import unquote
 import redis
@@ -13,6 +14,7 @@ from api.scraping import scrape_course_announcements
 
 # Load environment variables
 load_dotenv()
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 # --- Logging Setup ---
 logging.basicConfig(
