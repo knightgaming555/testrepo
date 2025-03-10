@@ -10,11 +10,13 @@ import redis
 from selectolax.parser import HTMLParser
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from api.scraping import scrape_course_announcements
 
 # Load environment variables
 load_dotenv()
-sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
+
 
 # --- Logging Setup ---
 logging.basicConfig(
