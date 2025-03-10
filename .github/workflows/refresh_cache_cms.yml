@@ -26,4 +26,4 @@ jobs:
         env:
           REDIS_URL: ${{ secrets.REDIS_URL }}
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
-        run: python refresh_cms_content-2.py
+        run: python cache/refresh_cms_content-2.py
