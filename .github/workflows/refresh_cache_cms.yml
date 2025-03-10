@@ -2,7 +2,7 @@ name: Refresh Cache
 
 on:
   schedule:
-  #test
+  - cron: "*/15 * * * *" # Runs every 15 minutes
   workflow_dispatch:
 
 jobs:
