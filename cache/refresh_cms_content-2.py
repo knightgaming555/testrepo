@@ -9,7 +9,7 @@ import redis
 from selectolax.parser import HTMLParser
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
-from scraping import scrape_course_announcements
+from api.scraping import scrape_course_announcements
 
 # Load environment variables
 load_dotenv()
