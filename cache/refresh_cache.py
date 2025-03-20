@@ -148,8 +148,12 @@ async def async_scrape_guc_data_fast(username, password, urls):
 __all__ = ["async_scrape_guc_data_fast"]
 
 # --- Import additional scraping functions for schedule and CMS ---
-from api.scraping import cms_scraper
-from api.schedule import scrape_schedule
+from api.scraping import (
+    cms_scraper,
+)  # Assuming this path is correct relative to the script location if needed in refresh_cache
+from api.schedule import (
+    scrape_schedule,
+)  # Assuming this path is correct relative to the script location
 
 
 # --- Grade Scraping Functions ---
@@ -575,6 +579,14 @@ def refresh_cache():
                 asyncio.to_thread(
                     scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG
                 )
+            )
+            # --- PRINT RAW SCHEDULE RESULT FROM REFRESH_CACHE ---
+            print(
+                "------------------- REFRESH_CACHE SCHEDULE RESULT -------------------"
+            )
+            print(json.dumps(schedule_result, indent=2))
+            print(
+                "-----------------------------------------------------------------------"
             )
             schedule_cache_key = f"schedule:{username}"
             redis_client.setex(
