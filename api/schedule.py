@@ -196,22 +196,18 @@ def scrape_schedule(username, password, base_url):
             start = perf_counter()
             res = session.get(base_url, timeout=10, verify=False)
             if res.status_code != 200:
-                return {
-                    "error": f"Initial request failed ({res.status_code})"
-                }, perf_counter() - start
+                return {"error": f"Initial request failed ({res.status_code})"}
             js_redirect_pattern = re.compile(r"sTo\('([a-f0-9-]+)'\)", re.IGNORECASE)
             js_match = js_redirect_pattern.search(res.text)
             if not js_match:
-                return {
-                    "error": "Failed to find JavaScript redirect parameter 'v'"
-                }, perf_counter() - start
+                return {"error": "Failed to find JavaScript redirect parameter 'v'"}
             v_parameter_value = js_match.group(1)
             schedule_url = f"{base_url}?v={v_parameter_value}"
             schedule_res = session.get(schedule_url, timeout=10, verify=False)
             scraped = parse_schedule_bs4(schedule_res.text)
-            return scraped, perf_counter() - start
+            return scraped
     except Exception as e:
-        return {"error": str(e)}, perf_counter() - start
+        return {"error": str(e)}
 
 
 def filter_schedule_details(schedule_data):
@@ -289,14 +285,12 @@ def api_schedule():
         return jsonify(cached_data), 200
 
     log_event(f"Starting schedule scraping for user: {username}")
-    result, elapsed = scrape_schedule(username, password, BASE_URL)
+    result = scrape_schedule(username, password, BASE_URL)
     if "error" in result:
         log_event(f"Error: {result['error']}")
         return jsonify({"error": result["error"]}), 500
     else:
-        log_event(
-            f"Successfully scraped schedule for user: {username} in {elapsed:.3f}s"
-        )
+        log_event(f"Successfully scraped schedule for user: {username} ")
         filtered = filter_schedule_details(result)
         # Cache the filtered schedule for about 2 months
 
