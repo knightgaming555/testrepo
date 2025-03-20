@@ -27,6 +27,14 @@ fernet = Fernet(ENCRYPTION_KEY)
 # Base URL for schedule scraping
 BASE_URL = "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx"
 
+timings = {
+    "1": "8:30A.M-9:45A.M",
+    "2": "9:45AM-10:55AM",
+    "3": "11:00AM-12:10PM",
+    "4": "12:20PM-1:30PM",
+    "5": "1:35PM-2:45PM",
+}
+
 # Suppress only the InsecureRequestWarning from urllib3
 warnings.simplefilter("ignore", InsecureRequestWarning)
 
@@ -201,7 +209,7 @@ def scrape_schedule(username, password, base_url):
             schedule_url = f"{base_url}?v={v_parameter_value}"
             schedule_res = session.get(schedule_url, timeout=10, verify=False)
             scraped = parse_schedule_bs4(schedule_res.text)
-            return scraped
+            return scraped, perf_counter() - start
     except Exception as e:
         return {"error": str(e)}, perf_counter() - start
 
@@ -291,8 +299,11 @@ def api_schedule():
         )
         filtered = filter_schedule_details(result)
         # Cache the filtered schedule for about 2 months
-        set_to_app_cache(cache_key, filtered, LONG_CACHE_TIMEOUT)
-        return jsonify(filtered), 200
+
+        response_data = (filtered, timings)
+
+        set_to_app_cache(cache_key, response_data, LONG_CACHE_TIMEOUT)
+        return jsonify(response_data), 200
 
 
 if __name__ == "__main__":
