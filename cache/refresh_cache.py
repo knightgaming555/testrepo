@@ -14,6 +14,8 @@ from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
 
+from schedule import scrape_schedule
+
 # Ensure the project root is on the path so we can import from the api folder
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -147,7 +149,7 @@ async def async_scrape_guc_data_fast(username, password, urls):
 __all__ = ["async_scrape_guc_data_fast"]
 
 # --- Import additional scraping functions for schedule and CMS ---
-from api.scraping import scrape_schedule, cms_scraper
+from api.scraping import cms_scraper
 
 
 # --- Grade Scraping Functions ---
