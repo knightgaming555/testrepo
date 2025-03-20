@@ -28,11 +28,11 @@ fernet = Fernet(ENCRYPTION_KEY)
 BASE_URL = "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx"
 
 timings = {
-    "1": "8:30A.M-9:45A.M",
-    "2": "9:45AM-10:55AM",
-    "3": "11:00AM-12:10PM",
-    "4": "12:20PM-1:30PM",
-    "5": "1:35PM-2:45PM",
+    "0": "8:30A.M-9:45A.M",
+    "1": "9:45AM-10:55AM",
+    "2": "11:00AM-12:10PM",
+    "3": "12:20PM-1:30PM",
+    "4": "1:35PM-2:45PM",
 }
 
 # Suppress only the InsecureRequestWarning from urllib3
