@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
 
-from schedule import scrape_schedule
+from api.schedule import scrape_schedule
 
 # Ensure the project root is on the path so we can import from the api folder
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
