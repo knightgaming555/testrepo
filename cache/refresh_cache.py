@@ -148,12 +148,11 @@ async def async_scrape_guc_data_fast(username, password, urls):
 __all__ = ["async_scrape_guc_data_fast"]
 
 # --- Import additional scraping functions for schedule and CMS ---
-from api.scraping import (
-    cms_scraper,
-)  # Assuming this path is correct relative to the script location if needed in refresh_cache
+from api.scraping import cms_scraper
 from api.schedule import (
     scrape_schedule,
-)  # Assuming this path is correct relative to the script location
+    filter_schedule_details,
+)  # Import filter_schedule_details
 
 
 # --- Grade Scraping Functions ---
@@ -573,6 +572,14 @@ def refresh_cache():
             )
             traceback.print_exc()
 
+        timings = {
+            "0": "8:30A.M-9:45A.M",
+            "1": "9:45AM-10:55AM",
+            "2": "11:00AM-12:10PM",
+            "3": "12:20PM-1:30PM",
+            "4": "1:35PM-2:45PM",
+        }
+
         # --- schedule refresh ---
         try:
             schedule_result = asyncio.run(
@@ -580,19 +587,20 @@ def refresh_cache():
                     scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG
                 )
             )
-            # --- PRINT RAW SCHEDULE RESULT FROM REFRESH_CACHE ---
-            print(
-                "------------------- REFRESH_CACHE SCHEDULE RESULT -------------------"
-            )
-            print(json.dumps(schedule_result, indent=2))
-            print(
-                "-----------------------------------------------------------------------"
-            )
+            filtered_schedule = filter_schedule_details(
+                schedule_result
+            )  # Filter the schedule data
+            schedule_response_data = (
+                filtered_schedule,
+                timings,
+            )  # Create the same tuple structure
             schedule_cache_key = f"schedule:{username}"
             redis_client.setex(
                 schedule_cache_key,
                 5184000,
-                json.dumps(schedule_result, ensure_ascii=False).encode("utf-8"),
+                json.dumps(schedule_response_data, ensure_ascii=False).encode(
+                    "utf-8"
+                ),  # Cache the tuple
             )
             print(
                 f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: updated"
