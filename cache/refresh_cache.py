@@ -573,7 +573,7 @@ def refresh_cache():
         try:
             schedule_result = asyncio.run(
                 asyncio.to_thread(
-                    scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG, 3, 2
+                    scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG
                 )
             )
             schedule_cache_key = f"schedule:{username}"
