@@ -573,7 +573,7 @@ def refresh_cache():
             traceback.print_exc()
 
         timings = {
-            "0": "8:30AM-9:45AM",
+            "0": "8:30AM-9:40AM",
             "1": "9:45AM-10:55AM",
             "2": "11:00AM-12:10PM",
             "3": "12:20PM-1:30PM",
