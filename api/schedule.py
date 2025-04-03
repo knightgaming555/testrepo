@@ -29,7 +29,7 @@ BASE_URL = "https://apps.guc.edu.eg/student_ext/Scheduling/GroupSchedule.aspx"
 
 timings = {
     "0": "8:15AM-9:45AM",
-    "1": "10:00-11:30AM",
+    "1": "10:00AM-11:30AM",
     "2": "11:45AM-1:15PM",
     "3": "1:45PM-3:15PM",
     "4": "3:45PM-5:15PM",
