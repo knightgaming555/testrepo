@@ -13,7 +13,10 @@ import httpx
 from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
+import urllib3
 
+# Disable insecure request warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Ensure the project root is on the path so we can import from the api folder
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -46,6 +49,9 @@ BASE_ATTENDANCE_URL_CONFIG = os.environ.get(
     "BASE_ATTENDANCE_URL",
     "https://apps.guc.edu.eg/student_ext/Attendance/ClassAttendance_ViewStudentAttendance_001.aspx",
 )
+
+# SSL verification configuration
+VERIFY_SSL = os.environ.get("VERIFY_SSL", "True").lower() == "true"
 
 # --- NTLM Authentication Imports ---
 # For asynchronous httpx calls:
@@ -132,17 +138,46 @@ def parse_notifications(html):
 
 # --- Asynchronous Scraping Function for guc_data ---
 async def async_scrape_guc_data_fast(username, password, urls):
-    # Use the httpx NTLM auth for async calls:
-    auth = HttpNtlmAuthAsync(f"{DOMAIN}\\{username}", password)
-    async with httpx.AsyncClient(auth=auth, timeout=10.0) as client:
-        tasks = [client.get(url) for url in urls]
-        responses = await asyncio.gather(*tasks)
-        htmls = {url: response.text for url, response in zip(urls, responses)}
-    student_html = htmls[urls[0]]
-    notif_html = htmls[urls[1]]
-    student_info = parse_student_info(student_html)
-    notifications = parse_notifications(notif_html)
-    return {"notifications": notifications, "student_info": student_info}
+    try:
+        # Use the httpx NTLM auth for async calls:
+        auth = HttpNtlmAuthAsync(f"{DOMAIN}\\{username}", password)
+        async with httpx.AsyncClient(
+            auth=auth, timeout=10.0, verify=VERIFY_SSL
+        ) as client:
+            tasks = [client.get(url) for url in urls]
+            responses = await asyncio.gather(*tasks)
+
+            # Check for auth failures or other errors
+            for response in responses:
+                if response.status_code == 401:
+                    print(
+                        f"{datetime.now().isoformat()} - Authentication failed (401) for {username}"
+                    )
+                    return None
+                if response.status_code != 200:
+                    print(
+                        f"{datetime.now().isoformat()} - Failed request with status code {response.status_code}"
+                    )
+                    return None
+
+            htmls = {url: response.text for url, response in zip(urls, responses)}
+
+        student_html = htmls[urls[0]]
+        notif_html = htmls[urls[1]]
+        student_info = parse_student_info(student_html)
+        notifications = parse_notifications(notif_html)
+
+        # Make sure we have valid data
+        if not student_info or not notifications:
+            print(f"{datetime.now().isoformat()} - Failed to parse data for {username}")
+            return None
+
+        return {"notifications": notifications, "student_info": student_info}
+    except Exception as e:
+        print(
+            f"{datetime.now().isoformat()} - Error in async_scrape_guc_data_fast for {username}: {e}"
+        )
+        return None
 
 
 __all__ = ["async_scrape_guc_data_fast"]
@@ -265,7 +300,13 @@ def get_grades(session, grades_url, max_retries=3, retry_delay=2):
     """
     for attempt in range(max_retries):
         try:
-            response = session.get(grades_url, timeout=10)
+            response = session.get(grades_url, timeout=10, verify=VERIFY_SSL)
+
+            # Check for auth failures
+            if response.status_code == 401:
+                print(f"Authentication failed (401) for {grades_url}")
+                return None
+
             response.raise_for_status()
             soup = BeautifulSoup(response.content, "lxml")
             grades = scrape_grades_from_html(soup)
@@ -306,8 +347,17 @@ def get_grades(session, grades_url, max_retries=3, retry_delay=2):
                     }
                     subject_grades_url = grades_url
                     response = session.post(
-                        subject_grades_url, data=form_data, timeout=10
+                        subject_grades_url,
+                        data=form_data,
+                        timeout=10,
+                        verify=VERIFY_SSL,
                     )
+
+                    # Check for auth failures in subject request
+                    if response.status_code == 401:
+                        print(f"Authentication failed (401) for subject {subject_name}")
+                        continue
+
                     response.raise_for_status()
                     subject_soup = BeautifulSoup(response.content, "lxml")
                     detailed_grades = extract_detailed_grades(subject_soup)
@@ -347,7 +397,7 @@ def scrape_grades(username, password, max_retries=3, retry_delay=2):
         return grades
     else:
         print(f"scrape_grades returned None for {grades_url}.")
-    return grades
+    return None
 
 
 # --- Attendance Scraping Functions ---
@@ -388,12 +438,20 @@ def make_request(
     for attempt in range(max_retries):
         try:
             if method.upper() == "GET":
-                response = session.get(url, timeout=timeout)
+                response = session.get(url, timeout=timeout, verify=VERIFY_SSL)
             elif method.upper() == "POST":
-                response = session.post(url, data=data, timeout=timeout)
+                response = session.post(
+                    url, data=data, timeout=timeout, verify=VERIFY_SSL
+                )
             else:
                 print(f"Unsupported method: {method}")
                 return None
+
+            # Check for auth failures
+            if response.status_code == 401:
+                print(f"Authentication failed (401) for {url}")
+                return None
+
             response.raise_for_status()
             return response
         except Exception as e:
@@ -537,6 +595,18 @@ def scrape_attendance(
     return attendance_data
 
 
+# --- Helper function to get existing cache data ---
+def get_from_cache(key):
+    try:
+        data = redis_client.get(key)
+        if data:
+            return json.loads(data.decode("utf-8"))
+        return None
+    except Exception as e:
+        print(f"{datetime.now().isoformat()} - Error getting cache for key {key}: {e}")
+        return None
+
+
 # --- Cache Refresh Logic ---
 def refresh_cache():
     print(f"{datetime.now().isoformat()} - Starting cache refresh for all users...")
@@ -554,18 +624,27 @@ def refresh_cache():
 
         # --- guc_data refresh (asynchronous) ---
         try:
+            guc_cache_key = f"guc_data:{username}"
+            existing_guc_data = get_from_cache(guc_cache_key)
+
             scrape_result = asyncio.run(
                 async_scrape_guc_data_fast(username, password, GUC_DATA_URLS)
             )
-            cache_key = f"guc_data:{username}"
-            redis_client.setex(
-                cache_key,
-                1500,
-                json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
-            )
-            print(
-                f"{datetime.now().isoformat()} - GUC Data cache refresh for {username}: updated"
-            )
+
+            # Only update cache if we got valid data back
+            if scrape_result is not None:
+                redis_client.setex(
+                    guc_cache_key,
+                    1500,
+                    json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
+                )
+                print(
+                    f"{datetime.now().isoformat()} - GUC Data cache refresh for {username}: updated"
+                )
+            else:
+                print(
+                    f"{datetime.now().isoformat()} - GUC Data cache refresh for {username}: skipped due to error, kept existing data"
+                )
         except Exception as e:
             print(
                 f"{datetime.now().isoformat()} - GUC Data cache refresh for {username}: failed"
@@ -581,29 +660,38 @@ def refresh_cache():
         }
         # --- schedule refresh ---
         try:
+            schedule_cache_key = f"schedule:{username}"
+            existing_schedule = get_from_cache(schedule_cache_key)
+
             schedule_result = asyncio.run(
                 asyncio.to_thread(
                     scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG
                 )
             )
-            filtered_schedule = filter_schedule_details(
-                schedule_result
-            )  # Filter the schedule data
-            schedule_response_data = (
-                filtered_schedule,
-                timings,
-            )  # Create the same tuple structure
-            schedule_cache_key = f"schedule:{username}"
-            redis_client.setex(
-                schedule_cache_key,
-                5184000,
-                json.dumps(schedule_response_data, ensure_ascii=False).encode(
-                    "utf-8"
-                ),  # Cache the tuple
-            )
-            print(
-                f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: updated"
-            )
+
+            # Only update if we got valid data
+            if schedule_result is not None:
+                filtered_schedule = filter_schedule_details(
+                    schedule_result
+                )  # Filter the schedule data
+                schedule_response_data = (
+                    filtered_schedule,
+                    timings,
+                )  # Create the same tuple structure
+                redis_client.setex(
+                    schedule_cache_key,
+                    5184000,
+                    json.dumps(schedule_response_data, ensure_ascii=False).encode(
+                        "utf-8"
+                    ),  # Cache the tuple
+                )
+                print(
+                    f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: updated"
+                )
+            else:
+                print(
+                    f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: skipped due to error, kept existing data"
+                )
         except Exception as e:
             print(
                 f"{datetime.now().isoformat()} - Schedule cache refresh for {username}: failed"
@@ -612,16 +700,25 @@ def refresh_cache():
 
         # --- CMS refresh ---
         try:
-            cms_result = asyncio.run(asyncio.to_thread(cms_scraper, username, password))
             cms_cache_key = f"cms:{username}"
-            redis_client.setex(
-                cms_cache_key,
-                2592000,
-                json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
-            )
-            print(
-                f"{datetime.now().isoformat()} - CMS cache refresh for {username}: updated"
-            )
+            existing_cms = get_from_cache(cms_cache_key)
+
+            cms_result = asyncio.run(asyncio.to_thread(cms_scraper, username, password))
+
+            # Only update if we got valid data
+            if cms_result is not None:
+                redis_client.setex(
+                    cms_cache_key,
+                    2592000,
+                    json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
+                )
+                print(
+                    f"{datetime.now().isoformat()} - CMS cache refresh for {username}: updated"
+                )
+            else:
+                print(
+                    f"{datetime.now().isoformat()} - CMS cache refresh for {username}: skipped due to error, kept existing data"
+                )
         except Exception as e:
             print(
                 f"{datetime.now().isoformat()} - CMS cache refresh for {username}: failed"
@@ -630,18 +727,27 @@ def refresh_cache():
 
         # --- grades refresh ---
         try:
+            grades_cache_key = f"grades:{username}"
+            existing_grades = get_from_cache(grades_cache_key)
+
             grades_result = asyncio.run(
                 asyncio.to_thread(scrape_grades, username, password)
             )
-            grades_cache_key = f"grades:{username}"
-            redis_client.setex(
-                grades_cache_key,
-                1500,
-                json.dumps(grades_result, ensure_ascii=False).encode("utf-8"),
-            )
-            print(
-                f"{datetime.now().isoformat()} - Grades cache refresh for {username}: updated"
-            )
+
+            # Only update if we got valid data
+            if grades_result is not None:
+                redis_client.setex(
+                    grades_cache_key,
+                    1500,
+                    json.dumps(grades_result, ensure_ascii=False).encode("utf-8"),
+                )
+                print(
+                    f"{datetime.now().isoformat()} - Grades cache refresh for {username}: updated"
+                )
+            else:
+                print(
+                    f"{datetime.now().isoformat()} - Grades cache refresh for {username}: skipped due to error, kept existing data"
+                )
         except Exception as e:
             print(
                 f"{datetime.now().isoformat()} - Grades cache refresh for {username}: failed"
@@ -650,6 +756,9 @@ def refresh_cache():
 
         # --- attendance refresh ---
         try:
+            attendance_cache_key = f"attendance:{username}"
+            existing_attendance = get_from_cache(attendance_cache_key)
+
             attendance_result = asyncio.run(
                 asyncio.to_thread(
                     scrape_attendance,
@@ -660,18 +769,21 @@ def refresh_cache():
                     2,
                 )
             )
-            print(
-                f"Attendance result for user '{username}': {json.dumps(attendance_result, ensure_ascii=False)}"
-            )
-            attendance_cache_key = f"attendance:{username}"
-            redis_client.setex(
-                attendance_cache_key,
-                1500,
-                json.dumps(attendance_result, ensure_ascii=False).encode("utf-8"),
-            )
-            print(
-                f"{datetime.now().isoformat()} - Attendance cache refresh for {username}: updated"
-            )
+
+            # Only update if we got valid data
+            if attendance_result is not None:
+                redis_client.setex(
+                    attendance_cache_key,
+                    1500,
+                    json.dumps(attendance_result, ensure_ascii=False).encode("utf-8"),
+                )
+                print(
+                    f"{datetime.now().isoformat()} - Attendance cache refresh for {username}: updated"
+                )
+            else:
+                print(
+                    f"{datetime.now().isoformat()} - Attendance cache refresh for {username}: skipped due to error, kept existing data"
+                )
         except Exception as e:
             print(
                 f"{datetime.now().isoformat()} - Attendance cache refresh for {username}: failed"

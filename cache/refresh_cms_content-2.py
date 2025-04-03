@@ -10,6 +10,10 @@ import redis
 from selectolax.parser import HTMLParser
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
+import urllib3
+
+# Disable insecure request warnings when verification is disabled
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from api.scraping import scrape_course_announcements
@@ -38,6 +42,7 @@ fernet = Fernet(ENCRYPTION_KEY.encode())
 
 # --- Config ---
 CACHE_EXPIRY = 14400  # 4 hours for combined content+announcements
+VERIFY_SSL = os.environ.get("VERIFY_SSL", "True").lower() == "true"
 
 
 # --- Unified Cache Key Generator (with URL normalization) ---
@@ -54,6 +59,18 @@ def set_in_cache(key, value):
         logger.info(f"Set cache for key {key} with expiry {CACHE_EXPIRY}")
     except Exception as e:
         logger.error(f"Error setting cache for key {key}: {e}")
+
+
+# --- Get Existing Cache ---
+def get_from_cache(key):
+    try:
+        data = redis_client.get(key)
+        if data:
+            return pickle.loads(data)
+        return None
+    except Exception as e:
+        logger.error(f"Error getting cache for key {key}: {e}")
+        return None
 
 
 # --- Session Management ---
@@ -132,27 +149,43 @@ def fetch_cms_content(username, password, course_url):
     logger.info(f"Fetching CMS content for {username} - {course_url}")
     session = get_session(username, password)
     try:
-        response = session.get(course_url, timeout=session.timeout)
+        response = session.get(course_url, timeout=session.timeout, verify=VERIFY_SSL)
+        if response.status_code == 401:
+            logger.error(f"Authentication failed (401) for {username} - {course_url}")
+            return None  # Return None to indicate auth failure - don't update cache
         if response.status_code != 200:
             logger.error(
                 f"Failed to retrieve CMS content; status {response.status_code}"
             )
-            return {"error": f"Failed to retrieve content: {response.status_code}"}
-        return fast_parse_content(response.text)
+            return None  # Return None for other failures - don't update cache
+        content = fast_parse_content(response.text)
+        if not content:
+            logger.warning(f"Parsed content is empty for {username} - {course_url}")
+            return None  # Don't update cache with empty content
+        return content
     except Exception as e:
         logger.exception(f"Error fetching CMS content: {e}")
-        return {"error": str(e)}
+        return None  # Don't update cache on exception
 
 
 def fetch_announcements(username, password, course_url):
     logger.info(f"Fetching announcements for {username} - {course_url}")
     try:
-        return scrape_course_announcements(
-            username, password, course_url, max_retries=2, retry_delay=1
+        announcements = scrape_course_announcements(
+            username,
+            password,
+            course_url,
+            max_retries=2,
+            retry_delay=1,
+            verify_ssl=VERIFY_SSL,
         )
+        if not announcements or not announcements.get("announcements_html"):
+            logger.warning(f"No announcements found for {username} - {course_url}")
+            return None  # Don't update with empty announcements
+        return announcements
     except Exception as e:
         logger.exception(f"Error fetching announcements: {e}")
-        return None
+        return None  # Don't update cache on exception
 
 
 # --- Refresh All Caches ---
@@ -196,19 +229,51 @@ def refresh_all_caches():
                 continue
 
             key = generate_cache_key(username, course_url)
+            # Get existing cached data before attempting refresh
+            existing_cache = get_from_cache(key)
+
+            # Fetch new content and announcements
             content = fetch_cms_content(username, password, course_url)
             announcements = fetch_announcements(username, password, course_url)
-            # Combine data into a list: first element with course_announcement, then weeks
-            if announcements and announcements.get("announcements_html"):
-                combined = [
-                    {"course_announcement": announcements.get("announcements_html")}
-                ] + content
+
+            # Only update cache if we successfully got content
+            if content is not None:  # We have valid content
+                # At this point we're updating the cache because content fetch succeeded
+                if announcements and announcements.get("announcements_html"):
+                    # We have both content and announcements
+                    combined = [
+                        {"course_announcement": announcements.get("announcements_html")}
+                    ] + content
+                else:
+                    # If we have content but no new announcements (or announcements fetch failed)
+                    # Check if we had announcements before
+                    if (
+                        existing_cache
+                        and isinstance(existing_cache, list)
+                        and len(existing_cache) > 0
+                    ):
+                        if "course_announcement" in existing_cache[0]:
+                            # Keep existing announcement but update content
+                            combined = [existing_cache[0]] + content
+                        else:
+                            combined = content
+                    else:
+                        combined = content
+
+                # Only set cache if combined is not empty
+                if combined:
+                    set_in_cache(key, combined)
+                    logger.info(
+                        f"Successfully refreshed cache for {username} - {course_name} ({course_url})"
+                    )
+                else:
+                    logger.warning(
+                        f"Skipped cache update for {username} - {course_name} ({course_url}) - empty data"
+                    )
             else:
-                combined = content
-            set_in_cache(key, combined)
-            logger.info(
-                f"Refreshed cache for {username} - {course_name} ({course_url})"
-            )
+                logger.warning(
+                    f"Skipped cache update for {username} - {course_name} ({course_url}) - content fetch failed"
+                )
 
 
 if __name__ == "__main__":
