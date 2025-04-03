@@ -573,11 +573,11 @@ def refresh_cache():
             traceback.print_exc()
 
         timings = {
-            "0": "8:30AM-9:40AM",
-            "1": "9:45AM-10:55AM",
-            "2": "11:00AM-12:10PM",
-            "3": "12:20PM-1:30PM",
-            "4": "1:35PM-2:45PM",
+            "0": "8:15AM-9:45AM",
+            "1": "10:00-11:30AM",
+            "2": "11:45AM-1:15PM",
+            "3": "1:45PM-3:15PM",
+            "4": "3:45PM-5:15PM",
         }
 
         # --- schedule refresh ---
