@@ -45,7 +45,10 @@ from cache.refresh_cache import (
     scrape_attendance,
     scrape_grades,
 )
-from api.schedule import scrape_schedule
+from api.schedule import (
+    scrape_schedule,
+    filter_schedule_details,
+)  # Import filter_schedule_details
 from api.scraping import (
     cms_scraper,
     scrape_exam_seats,
@@ -124,11 +127,28 @@ def refresh_cache():
                         scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG
                     )
                 )
+
+                timings = {
+                    "0": "8:15AM-9:45AM",
+                    "1": "10:00-11:30AM",
+                    "2": "11:45AM-1:15PM",
+                    "3": "1:45PM-3:15PM",
+                    "4": "3:45PM-5:15PM",
+                }
+                filtered_schedule = filter_schedule_details(
+                    schedule_result
+                )  # Filter the schedule
+                schedule_response_data = (
+                    filtered_schedule,
+                    timings,
+                )  # Structure the data with timings
                 schedule_cache_key = f"schedule:{username}"
                 redis_client.setex(
                     schedule_cache_key,
                     5184000,
-                    json.dumps(schedule_result, ensure_ascii=False).encode("utf-8"),
+                    json.dumps(schedule_response_data, ensure_ascii=False).encode(
+                        "utf-8"
+                    ),  # Cache the structured data
                 )
                 results[username]["schedule"] = "updated"
             except Exception as e:
