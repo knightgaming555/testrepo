@@ -2,7 +2,7 @@ name: Keep Endpoints Warm
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # runs every 5 minutes
   workflow_dispatch: # Allows you to trigger it manually
 
 jobs:
@@ -15,17 +15,17 @@ jobs:
           BASE_URL="https://v2-guc-scrapper.vercel.app/api"
           # List of endpoints to ping
           endpoints=(
-            "announcements"
-            "attendance"
-            "cms_content"
-            "cms_data"
-            "exam_seats"
-            "grades"
-            "guc_data"
-            "login"
-            "proxy"
-            "schedule"
-            "refresh_cache"
+            "announcements?bot=true"
+            "attendance?bot=true"
+            "cms_content?bot=true"
+            "cms_data?bot=true"
+            "exam_seats?bot=true"
+            "grades?bot=true"
+            "guc_data?bot=true"
+            "login?bot=true"
+            "proxy?bot=true"
+            "schedule?bot=true"
+            "refresh_cache?bot=true"
           )
           for endpoint in "${endpoints[@]}"; do
             echo "Pinging ${BASE_URL}/${endpoint}"
