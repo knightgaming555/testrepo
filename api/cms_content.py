@@ -1,4 +1,4 @@
-# cms_content_api.py (Rewritten and Corrected)
+# cms_content_api.py (Full Endpoint Code - Caching Mock Week Approach)
 
 import os
 import hashlib
@@ -35,7 +35,11 @@ except ImportError:
 
         # Provide a dummy function if the import fails
         def scrape_course_announcements(
-            username, password, course_url, max_retries=2, retry_delay=1
+            username,
+            password,
+            course_url,
+            max_retries=2,
+            retry_delay=1,
         ):
             logging.warning("Using dummy scrape_course_announcements function.")
             # Return an error structure similar to what the real function might return on failure
@@ -58,8 +62,13 @@ try:
         )
     # Import requests adapters if available
     try:
+        import urllib3  # Import urllib3 to disable warnings
         from urllib3.util import Retry
         from requests.adapters import HTTPAdapter
+
+        # Disable insecure request warnings if verification is off globally
+        if os.environ.get("VERIFY_SSL", "True").lower() != "true":
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     except ImportError:
         Retry = None
         HTTPAdapter = None
@@ -110,6 +119,9 @@ except Exception as e:
 # --- Config ---
 CACHE_EXPIRY = 14400  # 4 hours for combined content+announcements
 BASE_CMS_URL = "https://cms.guc.edu.eg"  # Base URL for relative links
+VERIFY_SSL = (
+    os.environ.get("VERIFY_SSL", "True").lower() == "true"
+)  # Global SSL verification flag
 
 
 # --- URL Normalization Helper ---
@@ -127,18 +139,15 @@ def normalize_course_url(course_url):
         if not parsed.netloc:
             # Try to fix common case where domain is in path
             if "cms.guc.edu.eg" in parsed.path:
-                # Find the start of the domain in the path
                 domain_start_index = parsed.path.find("cms.guc.edu.eg")
-                new_netloc = parsed.path[domain_start_index:].split("/")[
-                    0
-                ]  # Extract domain
+                new_netloc = parsed.path[domain_start_index:].split("/")[0]
                 new_path = "/" + "/".join(
                     parsed.path[domain_start_index:].split("/")[1:]
-                )  # Get remaining path
+                )
                 parsed = parsed._replace(
                     netloc=new_netloc, path=new_path if new_path != "/" else ""
                 )
-                logger.info(
+                logger.debug(
                     f"Attempted normalization for URL missing domain: {urlunparse(parsed)}"
                 )
             else:
@@ -150,11 +159,6 @@ def normalize_course_url(course_url):
         # Ensure path ends correctly
         if "courseviewstn" in parsed.path and not parsed.path.endswith(".aspx"):
             parsed = parsed._replace(path=parsed.path + ".aspx")
-
-        # Remove redundant query parameters if necessary (e.g., sid if not needed for caching)
-        # query_params = parse_qs(parsed.query)
-        # query_params.pop('sid', None) # Example: remove sid
-        # parsed = parsed._replace(query=urlencode(query_params, doseq=True))
 
         return urlunparse(parsed)
     except Exception as e:
@@ -260,19 +264,17 @@ def create_optimized_session(username, password):
         )  # Simplified, adjust if domain needed
     elif username and password and not HttpNtlmAuth:
         logger.error("NTLM auth requested but requests_ntlm not installed.")
-        # Consider raising an error or returning None depending on desired behavior
-        # raise ImportError("requests_ntlm is required for authentication but not installed.")
 
     # Configure retries and pooling
     if Retry and HTTPAdapter:
         retry_strategy = Retry(
-            total=2,  # Reduced retries
-            backoff_factor=0.5,  # Slightly longer backoff
+            total=2,
+            backoff_factor=0.5,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS"],
         )
         adapter = HTTPAdapter(
-            pool_connections=16,  # Reduced pool size
+            pool_connections=16,
             pool_maxsize=16,
             max_retries=retry_strategy,
         )
@@ -288,7 +290,7 @@ def create_optimized_session(username, password):
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
-            "Connection": "keep-alive",  # Explicitly keep-alive
+            "Connection": "keep-alive",
         }
     )
     session.timeout = (15, 30)  # (connect timeout, read timeout) in seconds
@@ -302,8 +304,6 @@ def parse_content_item(card):
     if not title_div:
         logger.debug("Could not find title div in content card.")
         return None
-
-    # Extract title text cleanly
     title_text = (
         title_div.text(strip=True, separator=" ")
         .replace("\n", " ")
@@ -311,13 +311,11 @@ def parse_content_item(card):
         .strip()
     )
 
-    # Find download link (handle both potential structures)
     download_link_node = card.css_first("a#download")
     download_url = None
     if download_link_node:
         href = download_link_node.attributes.get("href")
         if href:
-            # Make URL absolute if relative
             if href.startswith("/"):
                 download_url = BASE_CMS_URL + href
             elif href.startswith("http"):
@@ -326,7 +324,6 @@ def parse_content_item(card):
                 logger.warning(
                     f"Found unusual href format: {href} for title: {title_text}"
                 )
-                # Optionally try to resolve relative to course URL if needed
 
     return {"title": title_text, "download_url": download_url}
 
@@ -341,26 +338,21 @@ def parse_single_week(week_div):
 
     week_data = {
         "week_name": week_name,
-        "announcement": "",  # Initialize
-        "description": "",  # Initialize
+        "announcement": "",
+        "description": "",
         "contents": [],
     }
 
-    # --- Extract Week Description and Announcement ---
     p3_div = week_div.css_first("div.p-3")
     if p3_div:
-        # Find all potential description/announcement divs (those containing a <strong> tag)
-        info_divs = p3_div.css("div")  # Get all divs inside p-3
-        current_key = None
+        info_divs = p3_div.css("div")
         for div in info_divs:
             strong_tag = div.css_first("strong")
             if strong_tag:
                 header_text = strong_tag.text(strip=True).lower()
-                # Find the associated <p> tag immediately following this div
                 next_node = div.next
                 para_text = ""
                 while next_node:
-                    # Check if it's a <p> tag (common case)
                     if next_node.tag == "p" and "m-2" in next_node.attributes.get(
                         "class", ""
                     ):
@@ -370,36 +362,31 @@ def parse_single_week(week_div):
                             .replace("\r", "")
                             .strip()
                         )
-                        break  # Found the paragraph
-                    # Stop if we hit the next section header or the content area
+                        break
                     if next_node.tag == "div" and (
                         next_node.css_first("strong")
                         or next_node.css_first(".card.mb-4")
                     ):
                         break
-                    next_node = next_node.next  # Move to the next sibling
+                    next_node = next_node.next
 
                 if "announcement" in header_text:
-                    # Check if the parent div is hidden
                     parent_style = div.attributes.get("style", "")
                     if "display:none" not in parent_style.replace(" ", ""):
                         week_data["announcement"] = para_text
                 elif "description" in header_text:
                     week_data["description"] = para_text
-                # Stop looking for description/announcement once we hit 'Content'
                 elif "content" in header_text:
-                    break  # Assume content follows
+                    break  # Stop after finding content header
 
-    # --- Extract Contents ---
-    content_cards = week_div.css("div.p-3 .card.mb-4")  # More specific selector
+    content_cards = week_div.css("div.p-3 .card.mb-4")
     if content_cards:
-        # Use fewer workers for potentially I/O bound parsing
         num_workers = min(len(content_cards), (os.cpu_count() or 1))
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=num_workers, thread_name_prefix="ContentParse"
         ) as executor:
             contents = list(executor.map(parse_content_item, content_cards))
-        week_data["contents"] = [c for c in contents if c]  # Filter out None results
+        week_data["contents"] = [c for c in contents if c]
 
     return week_data
 
@@ -411,9 +398,6 @@ def fast_parse_content(html_content):
         return []
     try:
         parser = HTMLParser(html_content)
-        # Target the specific container holding the weeks if possible
-        # If weeksdata are direct children of app-main__inner, this is fine.
-        # If nested deeper, adjust selector e.g., "#ContentPlaceHolderright_ContentPlaceHoldercontent_Panelweeks .weeksdata"
         week_divs = parser.css(".weeksdata")
         if not week_divs:
             logger.warning(
@@ -421,30 +405,26 @@ def fast_parse_content(html_content):
             )
             return []
 
-        # Process weeks sequentially first to avoid excessive thread overhead for small numbers
         if len(week_divs) < 5:
             weeks = [parse_single_week(div) for div in week_divs]
         else:
-            num_workers = min(
-                len(week_divs), (os.cpu_count() or 1) * 2
-            )  # Adjust as needed
+            num_workers = min(len(week_divs), (os.cpu_count() or 1) * 2)
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=num_workers, thread_name_prefix="WeekParse"
             ) as executor:
                 weeks = list(executor.map(parse_single_week, week_divs))
 
-        valid_weeks = [w for w in weeks if w]  # Filter out None results
+        valid_weeks = [w for w in weeks if w]
 
-        # Sort weeks by name (descending, assuming format "Week: YYYY-MM-DD")
         try:
-            # Attempt to parse date from week_name for robust sorting
+
             def get_week_date(week_dict):
                 name = week_dict.get("week_name", "")
                 try:
                     date_str = name.split(":")[-1].strip()
                     return datetime.strptime(date_str, "%Y-%m-%d")
                 except (ValueError, IndexError):
-                    return datetime.min  # Fallback for unexpected formats
+                    return datetime.min
 
             valid_weeks.sort(key=get_week_date, reverse=True)
         except Exception as sort_err:
@@ -460,13 +440,16 @@ def fast_parse_content(html_content):
 
 # --- Combined CMS Scraper Function ---
 def cms_scraper(username, password, course_url, force_fetch=False):
-    """Fetches and parses CMS content and announcements, using cache."""
+    """Fetches and parses CMS content and announcements.
+    Caches data WITH Mock Week included.
+    Returns final list WITH Mock Week inserted.
+    """
     normalized_url = normalize_course_url(course_url)
     if not normalized_url:
         return {"error": "Invalid course URL provided."}
 
     key = generate_cache_key(username, normalized_url)
-    mock_week = {
+    mock_week = {  # Define mock week locally
         "week_name": "Mock Week",
         "announcement": "",
         "description": "Placeholder for layout",
@@ -475,79 +458,57 @@ def cms_scraper(username, password, course_url, force_fetch=False):
 
     # 1. Try cache first (unless forced)
     if not force_fetch:
-        cached_data = get_from_cache(key)
-        if cached_data:
+        cached_data = get_from_cache(key)  # Expected: [Announce?, Mock, Weeks]
+        if cached_data is not None:
             logger.info(
-                f"Returning cached CMS data for {username} and course {normalized_url}"
+                f"Using cached CMS data for {username} and course {normalized_url}"
             )
-            # Structure: cached_data might be [overall_announcement_dict, week1, week2,...]
-            # or just [week1, week2,...] if no overall announcement was found/cached.
-            final_result = []
-            if (
-                cached_data
-                and isinstance(cached_data[0], dict)
-                and "course_announcement" in cached_data[0]
-            ):
-                final_result.append(cached_data[0])  # Add overall announcement
-                final_result.append(mock_week)  # Add mock week
-                final_result.extend(cached_data[1:])  # Add actual weeks
-            else:
-                final_result.append(mock_week)  # Add mock week
-                final_result.extend(
-                    cached_data
-                )  # Add actual weeks (no overall announcement)
-            return final_result
+            # Assume cache already has the correct structure [Announce?, Mock, Weeks]
+            return cached_data  # Return cache directly
 
+    # --- Cache Miss or Force Fetch ---
     logger.info(f"Fetching fresh CMS data for {username} and course {normalized_url}")
     session = get_session(username, password)
 
     # 2. Fetch fresh data
     try:
         response = session.get(
-            normalized_url, timeout=session.timeout
-        )  # Use normalized URL
+            normalized_url, timeout=session.timeout, verify=VERIFY_SSL
+        )  # Use verify flag
         response.raise_for_status()
-
         html_content = response.text
         if not html_content:
             logger.error(f"Received empty content for {normalized_url}")
             return {"error": "Received empty content from CMS."}
 
-        # Basic check for login page redirection
         temp_parser = HTMLParser(html_content)
         page_title_node = temp_parser.css_first("title")
         page_title = page_title_node.text().lower() if page_title_node else ""
         if "login" in page_title or "sign in" in page_title:
-            # More robust check: look for login form elements
-            login_form = temp_parser.css_first(
-                "form[action*='login']"
-            )  # Example selector
+            login_form = temp_parser.css_first("form[action*='login']")
             if login_form:
                 logger.warning(
                     f"Authentication likely failed for {username} - redirected to login page for {normalized_url}"
                 )
                 return {"error": "Authentication failed or session expired."}
 
-        # 3. Parse content and announcements (concurrently)
+        # 3. Parse content and announcements concurrently
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=2, thread_name_prefix="Scrape"
         ) as executor:
-            # Submit week parsing
             content_future = executor.submit(fast_parse_content, html_content)
-            # Submit overall announcement scraping
             announcements_future = executor.submit(
                 scrape_course_announcements,
                 username,
                 password,
-                normalized_url,  # Use normalized URL here too
+                normalized_url,
                 max_retries=2,
                 retry_delay=1,
             )
-            # Retrieve results
-            content_weeks = (
-                content_future.result()
-            )  # This now contains week descriptions/announcements
-            announcements_result = announcements_future.result()
+            content_weeks = content_future.result()  # List of week dicts
+            announcements_result = (
+                announcements_future.result()
+            )  # Dict { "announcements_html": "..." } or None or Dict { "error": "..." }
 
         overall_announcements_html = None
         announcement_error = None
@@ -564,8 +525,9 @@ def cms_scraper(username, password, course_url, force_fetch=False):
                 f"Unexpected result from scrape_course_announcements: {type(announcements_result)}"
             )
 
-        # 4. Combine results and check if anything was found
+        # 4. Check if anything was found
         if not overall_announcements_html and not content_weeks:
+            # If content_weeks is None (parsing failed) or empty list, AND no announcement
             error_detail = "Failed to find any course content (weeks) or overall announcements on the page."
             if announcement_error:
                 error_detail += f" Announcement scraping failed: {announcement_error}."
@@ -575,27 +537,33 @@ def cms_scraper(username, password, course_url, force_fetch=False):
             )
             return {"error": error_detail}
 
-        # 5. Cache combined data (structure: [optional_overall_announcement_dict] + [week_dicts])
-        combined_data_for_cache = []
+        # 5. Assemble final list WITH Mock Week for caching and returning
+        combined_data_for_cache_and_return = []
         if overall_announcements_html:
-            combined_data_for_cache.append(
+            combined_data_for_cache_and_return.append(
                 {"course_announcement": overall_announcements_html}
+            )  # 1. Announce
+        combined_data_for_cache_and_return.append(mock_week)  # 2. Mock Week
+        if content_weeks:  # Check if content_weeks is not None and not empty list
+            combined_data_for_cache_and_return.extend(content_weeks)  # 3. Actual Weeks
+
+        # Cache the data (only if we have more than just Mock Week, or if announcement exists)
+        # This condition ensures we don't cache just [MockWeek] if both fetches failed.
+        if len(combined_data_for_cache_and_return) > 1 or (
+            len(combined_data_for_cache_and_return) == 1
+            and "course_announcement" in combined_data_for_cache_and_return[0]
+        ):
+            set_in_cache(key, combined_data_for_cache_and_return)
+            logger.debug(
+                f"Data cached for key {key} (WITH Mock Week): {[item.get('week_name', 'Overall Announcement') for item in combined_data_for_cache_and_return]}"
             )
-        combined_data_for_cache.extend(content_weeks)
+        else:
+            logger.warning(
+                f"Only Mock Week resulted from fresh fetch for {key}. Not caching."
+            )
 
-        if combined_data_for_cache:  # Only cache if we actually got something
-            set_in_cache(key, combined_data_for_cache)
-
-        # 6. Prepare final result with mock week
-        final_result = []
-        if overall_announcements_html:
-            final_result.append({"course_announcement": overall_announcements_html})
-        final_result.append(
-            mock_week
-        )  # Add mock week regardless of overall announcement
-        final_result.extend(content_weeks)
-
-        return final_result
+        # 6. Return the assembled list
+        return combined_data_for_cache_and_return
 
     except requests.exceptions.Timeout as e:
         logger.error(
@@ -628,7 +596,7 @@ def cms_scraper(username, password, course_url, force_fetch=False):
 
 
 # --- Async Redis Logging Setup ---
-API_LOG_KEY = "api_logs:cms_content"  # Specific key for this API
+API_LOG_KEY = "api_logs"  # Specific key for this API
 MAX_LOG_ENTRIES = 5000
 log_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=5, thread_name_prefix="LogThread"
@@ -638,15 +606,12 @@ log_executor = concurrent.futures.ThreadPoolExecutor(
 def _log_to_redis_task(log_entry_dict):
     """Task to push a log entry to Redis list."""
     if not redis_client:
-        # Log locally if Redis is down
         logger.warning(f"Redis unavailable. Local log: {log_entry_dict}")
         return
     try:
         log_entry_json = json.dumps(log_entry_dict)
-        # Ensure key and value are bytes if decode_responses=False
         log_key_bytes = API_LOG_KEY.encode("utf-8")
         log_entry_bytes = log_entry_json.encode("utf-8")
-
         pipe = redis_client.pipeline()
         pipe.lpush(log_key_bytes, log_entry_bytes)
         pipe.ltrim(log_key_bytes, 0, MAX_LOG_ENTRIES - 1)
@@ -673,7 +638,7 @@ def before_request_func():
     """Initialize request context."""
     g.start_time = perf_counter()
     g.request_time = datetime.now(timezone.utc)
-    g.username = None  # Will be set in endpoint if available
+    g.username = None
     g.log_outcome = "unknown"
     g.log_error_message = None
 
@@ -681,13 +646,11 @@ def before_request_func():
 @app.after_request
 def after_request_handler(response):
     """Logs request details asynchronously and adds CORS headers."""
-    # Standard paths to skip logging
     if request.method == "OPTIONS" or request.path in [
         "/api/logs",
         "/api/test_form",
         "/favicon.ico",
     ]:
-        # Still add CORS headers for OPTIONS preflight requests
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = (
@@ -696,14 +659,12 @@ def after_request_handler(response):
         response.headers["Access-Control-Max-Age"] = "86400"
         return response
 
-    # --- User-Agent Handling ---
     raw_ua_header = request.headers.get("User-Agent", "Unknown")
-    final_user_agent = raw_ua_header[:250]  # Limit length
+    final_user_agent = raw_ua_header[:250]
 
-    # --- Logging ---
     elapsed_ms = (perf_counter() - g.start_time) * 1000
     log_entry = {
-        "username": getattr(g, "username", None),  # Get username set in endpoint
+        "username": getattr(g, "username", None),
         "endpoint": request.path,
         "method": request.method,
         "status_code": response.status_code,
@@ -727,7 +688,6 @@ def after_request_handler(response):
     except Exception as e:
         logger.error(f"Error submitting log task to executor: {e}", exc_info=True)
 
-    # --- CORS Headers ---
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
@@ -739,7 +699,7 @@ def after_request_handler(response):
 @app.route("/api/cms_content", methods=["GET"])
 def get_cms_content():
     """API endpoint to get CMS content and announcements."""
-    start_time = perf_counter()  # Track time specifically for this endpoint
+    start_time = perf_counter()
 
     # --- Bot Health Check ---
     bot_param = request.args.get("bot")
@@ -782,15 +742,16 @@ def get_cms_content():
 
     g.username = username  # Set for logging
 
-    # --- Call Scraper ---
     logger.info(
         f"Processing request for user {username}, course: {course_url}, force_fetch: {force_fetch}"
     )
-    result = cms_scraper(username, password, course_url, force_fetch=force_fetch)
+
+    # --- Call cms_scraper (handles cache logic internally and returns final list WITH Mock Week) ---
+    result_data = cms_scraper(username, password, course_url, force_fetch=force_fetch)
 
     # --- Handle Result ---
-    if isinstance(result, dict) and "error" in result:
-        error_msg = result["error"]
+    if isinstance(result_data, dict) and "error" in result_data:
+        error_msg = result_data["error"]
         logger.error(
             f"Scraper failed for user {username}, course {course_url}: {error_msg}"
         )
@@ -806,25 +767,34 @@ def get_cms_content():
             status_code = 404
             g.log_outcome = "not_found"
         elif "timed out" in error_msg.lower() or "Network error" in error_msg.lower():
-            status_code = 504  # Gateway Timeout
+            status_code = 504
             g.log_outcome = "timeout_or_network_error"
         elif (
             "parsing failed" in error_msg.lower()
             or "Failed to parse" in error_msg.lower()
         ):
-            status_code = 502  # Bad Gateway
+            status_code = 502
             g.log_outcome = "parsing_error"
         else:
-            status_code = 500  # Internal Server Error (default)
+            status_code = 500
             g.log_outcome = "internal_error"
         return jsonify({"error": error_msg}), status_code
-    else:
-        # Success case
+    elif isinstance(result_data, list):  # Success case
+        # The list received from cms_scraper already includes Mock Week in the correct place
         g.log_outcome = "success"
         logger.info(
             f"Successfully processed request for user {username}, course: {course_url} in {(perf_counter() - start_time)*1000:.2f} ms"
         )
-        return jsonify(result), 200
+        return jsonify(result_data), 200
+    else:
+        # Safeguard for unexpected return type
+        error_msg = "Scraper returned an unexpected data format."
+        logger.error(
+            f"Unexpected data format from scraper for {username}, course {course_url}: {type(result_data)}"
+        )
+        g.log_outcome = "internal_error"
+        g.log_error_message = error_msg
+        return jsonify({"error": error_msg}), 500
 
 
 @app.route("/api/test_form", methods=["GET"])
@@ -907,13 +877,11 @@ atexit.register(shutdown_log_executor)
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Changed default port slightly
+    port = int(os.environ.get("PORT", 5001))  # Use a different default port if needed
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     logger.info(
         f"Starting Flask app (CMS Content API) on port {port} with debug mode: {debug_mode}"
     )
-    # Use host='0.0.0.0' for Docker/external access.
-    # waitress-serve is recommended for production instead of app.run(debug=False)
 
     # Run with Flask's built-in server for debugging
     app.run(debug=True, host="0.0.0.0", port=port, use_reloader=True)
