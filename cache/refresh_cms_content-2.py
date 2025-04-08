@@ -1,4 +1,4 @@
-# refresh_all_caches.py (Modified to Cache Mock Week)
+# refresh_all_caches.py (Corrected to use 'course_announcement' key without extra data)
 
 import os
 import hashlib
@@ -22,6 +22,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- Append parent directory if needed ---
 try:
+    # Assumes scrape_course_announcements returns {"announcements_html": "..."} on success
     from api.scraping import scrape_course_announcements
 except ImportError:
     try:
@@ -41,6 +42,8 @@ except ImportError:
             retry_delay=1,
         ):
             logging.warning("Using dummy scrape_course_announcements function.")
+            # Simulate returning the structure expected by fetch_announcements
+            # return {"announcements_html": "<p>Dummy Announcement</p>"}
             return {"error": "Dummy function: Overall announcement section not found"}
 
 
@@ -116,6 +119,10 @@ def normalize_course_url(course_url):
                     netloc=new_netloc, path=new_path if new_path != "/" else ""
                 )
             else:
+                # If domain cannot be inferred, return original or handle error
+                logger.warning(
+                    f"Could not reliably normalize URL missing domain: {course_url}"
+                )
                 return course_url
         if "courseviewstn" in parsed.path and not parsed.path.endswith(".aspx"):
             parsed = parsed._replace(path=parsed.path + ".aspx")
@@ -157,6 +164,8 @@ def get_from_cache(key):
                 return pickle.loads(data_bytes)
             except Exception as e:
                 logger.error(f"Error unpickling cache for key {key}: {e}")
+                # Optionally delete corrupted key
+                # try: redis_client.delete(key) except: pass
                 return None
         else:
             logger.info(f"Cache miss for key {key}")
@@ -189,13 +198,13 @@ def get_session(username, password):
         logger.warning("Retry/Adapter libs not found.")
     session.headers.update(
         {
-            "User-Agent": "Mozilla/5.0 ...",
-            "Accept": "text/html...",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.9",
             "Connection": "keep-alive",
         }
     )
-    session.timeout = (15, 30)
+    session.timeout = (15, 30)  # (connect, read)
     return session
 
 
@@ -255,6 +264,7 @@ def parse_single_week(week_div):
                             .strip()
                         )
                         break
+                    # Stop condition: next strong header or content card section
                     if next_node.tag == "div" and (
                         next_node.css_first("strong")
                         or next_node.css_first(".card.mb-4")
@@ -262,6 +272,7 @@ def parse_single_week(week_div):
                         break
                     next_node = next_node.next
                 if "announcement" in header_text:
+                    # Check if the announcement div itself is hidden
                     if "display:none" not in div.attributes.get("style", "").replace(
                         " ", ""
                     ):
@@ -269,6 +280,7 @@ def parse_single_week(week_div):
                 elif "description" in header_text:
                     week_data["description"] = para_text
                 elif "content" in header_text:
+                    # Found the content section, no need to check further divs for announcement/description
                     break
     content_cards = week_div.css("div.p-3 .card.mb-4")
     if content_cards:
@@ -289,13 +301,15 @@ def fast_parse_content(html_content):
         weeks = [parse_single_week(div) for div in week_divs]
         valid_weeks = [w for w in weeks if w]
         try:
-
+            # Sort weeks by date (newest first)
             def get_week_date(week_dict):
                 name = week_dict.get("week_name", "")
                 try:
+                    # Assumes format "Week: YYYY-MM-DD"
                     date_str = name.split(":")[-1].strip()
                     return datetime.strptime(date_str, "%Y-%m-%d")
-                except:
+                except (ValueError, IndexError):
+                    # Return a very old date for weeks without a parsable date
                     return datetime.min
 
             valid_weeks.sort(key=get_week_date, reverse=True)
@@ -307,7 +321,7 @@ def fast_parse_content(html_content):
         return []
 
 
-# --- Fetch Functions (Keep as before) ---
+# --- Fetch Functions ---
 def fetch_cms_content(username, password, course_url):
     # Returns list of week dicts, or None on failure
     start_time = perf_counter()
@@ -320,29 +334,37 @@ def fetch_cms_content(username, password, course_url):
         )
         if response.status_code == 401:
             logger.error(f"Auth failed (401) for {username} - {normalized_url}")
-            return None
-        response.raise_for_status()
+            return None  # Indicate failure
+        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
         html_content = response.text
         if not html_content:
             logger.warning(f"Empty HTML for {username} - {normalized_url}")
-            return None
+            return None  # Indicate failure
+
+        # Quick check for login page redirection
         temp_parser = HTMLParser(html_content)
         page_title_node = temp_parser.css_first("title")
         page_title = page_title_node.text().lower() if page_title_node else ""
         if "login" in page_title or "sign in" in page_title:
+            # More robust check: look for a login form
             if temp_parser.css_first("form[action*='login']"):
                 logger.error(
                     f"Auth failed (login redirect) for {username} - {normalized_url}"
                 )
-                return None
+                return None  # Indicate failure
+
         content = fast_parse_content(html_content)
-        if not content:
-            logger.warning(f"Parsed content empty for {username} - {normalized_url}.")
-            return None  # Treat as failure for refresh
+        # Check if content parsing actually returned something meaningful
+        if content is None:  # Parsing error occurred
+            logger.warning(f"Content parsing failed for {username} - {normalized_url}.")
+            return None  # Indicate failure
+        # If parsing succeeded but found nothing, content will be []
+        # We might still want to cache this empty result if announcements were found.
+
         logger.info(
             f"Parsed content for {username} - {normalized_url} in {(perf_counter() - start_time)*1000:.2f} ms"
         )
-        return content
+        return content  # Return list (possibly empty)
     except requests.exceptions.Timeout as e:
         logger.error(
             f"Timeout fetching CMS content for {username} - {normalized_url}: {e}"
@@ -367,10 +389,13 @@ def fetch_cms_content(username, password, course_url):
 
 def fetch_announcements(username, password, course_url):
     # Returns dict {"announcements_html": "..."} or None on failure/empty
+    # The calling function (refresh_all_caches) will transform this.
     start_time = perf_counter()
     normalized_url = normalize_course_url(course_url)
     logger.info(f"Fetching announcements for {username} - {normalized_url}")
     try:
+        # Assuming scrape_course_announcements returns {"announcements_html": "..."} on success
+        # or {"error": "..."} on failure.
         announcements_result = scrape_course_announcements(
             username,
             password,
@@ -378,40 +403,46 @@ def fetch_announcements(username, password, course_url):
             max_retries=2,
             retry_delay=1,
         )
+
+        # Check if the result is a dictionary and contains the expected key
         if (
             isinstance(announcements_result, dict)
             and "announcements_html" in announcements_result
         ):
             html = announcements_result["announcements_html"]
-            if html:
+            if html and html.strip():  # Ensure HTML is not just whitespace
                 logger.info(
                     f"Fetched announcements for {username} - {normalized_url} in {(perf_counter() - start_time)*1000:.2f} ms"
                 )
+                # Return the dict as received from scrape_course_announcements
                 return announcements_result
             else:
                 logger.warning(
-                    f"Empty announcement HTML for {username} - {normalized_url}"
+                    f"Empty or whitespace-only announcement HTML for {username} - {normalized_url}"
                 )
-                return None
+                return None  # Treat empty HTML as failure for caching purposes
         elif isinstance(announcements_result, dict) and "error" in announcements_result:
             logger.error(
                 f"Announce scrape failed for {username} - {normalized_url}: {announcements_result['error']}"
             )
-            return None
+            return None  # Indicate failure
         else:
-            logger.warning(f"No valid announcements for {username} - {normalized_url}")
-            return None
+            # Handle cases where scrape_course_announcements might return None or unexpected types
+            logger.warning(
+                f"No valid announcements found or unexpected return type ({type(announcements_result)}) for {username} - {normalized_url}"
+            )
+            return None  # Indicate failure
     except Exception as e:
         logger.exception(
             f"Error fetching announcements for {username} - {normalized_url}: {e}"
         )
-        return None
+        return None  # Indicate failure
 
 
 # --- Refresh All Caches ---
 def refresh_all_caches():
     """Iterates through users and courses, fetches data, and updates cache
-    WITH Mock Week included in the correct position.
+    WITH Mock Week included in the correct position, using 'course_announcement' key.
     """
     if not redis_client:
         logger.critical("Redis client is not available. Aborting cache refresh.")
@@ -463,26 +494,55 @@ def refresh_all_caches():
                     f"No course list for {username} under key '{course_list_key}'. Skipping."
                 )
                 continue
-            # ... (Keep course list parsing logic as before) ...
+
+            # Try parsing as JSON list of dicts first
             try:
                 courses_raw = json.loads(course_data_bytes.decode("utf-8"))
                 if not isinstance(courses_raw, list):
-                    raise TypeError("Not a list")
-                courses = courses_raw
-            except:
-                try:
-                    courses = [
-                        url.strip()
-                        for url in course_data_bytes.decode("utf-8").split(",")
-                        if url.strip()
-                    ]
-                except Exception as decode_err:
-                    logger.error(
-                        f"Cannot parse course data for {username}: {decode_err}"
+                    raise TypeError("Course data is not a list")
+                # Ensure all items are either strings (URLs) or dicts with 'course_url'
+                courses = []
+                for item in courses_raw:
+                    if isinstance(item, dict) and "course_url" in item:
+                        courses.append(item)
+                    elif isinstance(item, str):
+                        # Convert old string format to new dict format for consistency
+                        courses.append({"course_name": item, "course_url": item})
+                    else:
+                        logger.warning(
+                            f"Skipping invalid course entry for {username}: {item!r}"
+                        )
+                if not courses:
+                    logger.warning(
+                        f"No valid course entries found after parsing for {username}"
                     )
                     continue
+
+            except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as json_err:
+                # Fallback to comma-separated string list (old format)
+                logger.debug(
+                    f"Failed to parse course list as JSON for {username}, falling back to string split: {json_err}"
+                )
+                try:
+                    courses_str = course_data_bytes.decode("utf-8")
+                    courses = [
+                        {"course_name": url.strip(), "course_url": url.strip()}
+                        for url in courses_str.split(",")
+                        if url.strip()
+                    ]
+                    if not courses:
+                        logger.warning(
+                            f"No valid course URLs found after string split for {username}"
+                        )
+                        continue
+                except Exception as decode_err:
+                    logger.error(
+                        f"Cannot parse course data for {username} (both JSON and string split failed): {decode_err}"
+                    )
+                    continue
+
         except Exception as e:
-            logger.error(f"Error getting course list for {username}: {e}")
+            logger.error(f"Error getting/parsing course list for {username}: {e}")
             continue
 
         logger.info(f"User {username} has {len(courses)} courses.")
@@ -490,20 +550,40 @@ def refresh_all_caches():
             course_url = None
             course_name = "Unknown"
             try:
-                # ... (Keep course_url/name extraction logic as before) ...
+                # Extract URL and Name consistently
                 if isinstance(course_entry, dict):
                     course_url = course_entry.get("course_url")
                     course_name = course_entry.get(
                         "course_name", course_url or "Unknown"
                     )
-                elif isinstance(course_entry, str):
+                elif isinstance(
+                    course_entry, str
+                ):  # Should not happen with conversion above, but keep for safety
                     course_url = course_entry
                     course_name = course_url
-                if not course_url or not course_url.startswith("http"):
-                    logger.error(f"Invalid URL for {username}: {course_entry!r}")
+                else:
+                    logger.error(
+                        f"Invalid course entry type for {username}: {type(course_entry)} - {course_entry!r}"
+                    )
+                    continue
+
+                if (
+                    not course_url
+                    or not isinstance(course_url, str)
+                    or not course_url.startswith("http")
+                ):
+                    logger.error(
+                        f"Invalid or missing URL for {username}: {course_entry!r}"
+                    )
                     continue
 
                 normalized_url = normalize_course_url(course_url)
+                if not normalized_url:  # Normalization failed
+                    logger.error(
+                        f"Skipping course due to normalization failure: {course_url}"
+                    )
+                    continue
+
                 cache_key = generate_cache_key(username, normalized_url)
 
                 logger.debug(
@@ -511,9 +591,13 @@ def refresh_all_caches():
                 )
 
                 # Fetch new data concurrently
-                new_content_list = None
-                new_announcement_dict = None
+                new_content_list = (
+                    None  # Expected: list of week dicts, or None on failure
+                )
+                # Fetches {"announcements_html": "..."} or None
+                announcement_fetch_result = None
                 fetch_success = False  # Track if *any* part succeeded
+
                 with concurrent.futures.ThreadPoolExecutor(
                     max_workers=2, thread_name_prefix="FetchCourse"
                 ) as executor:
@@ -524,65 +608,104 @@ def refresh_all_caches():
                         fetch_announcements, username, password, normalized_url
                     )
                     try:
-                        new_content_list = (
-                            content_future.result()
-                        )  # List of weeks or None
+                        new_content_list = content_future.result()
+                        # fetch_cms_content returns [] for success but no weeks, None for failure
                         if new_content_list is not None:
                             fetch_success = True
                     except Exception as e:
-                        logger.error(f"Content fetch future error: {e}")
+                        logger.error(
+                            f"Content fetch future error for {normalized_url}: {e}",
+                            exc_info=True,
+                        )
                     try:
-                        new_announcement_dict = (
-                            announcement_future.result()
-                        )  # Dict or None
-                        if new_announcement_dict is not None:
+                        announcement_fetch_result = announcement_future.result()
+                        # fetch_announcements returns dict on success, None on failure/empty
+                        if announcement_fetch_result is not None:
                             fetch_success = True
                     except Exception as e:
-                        logger.error(f"Announcement fetch future error: {e}")
+                        logger.error(
+                            f"Announcement fetch future error for {normalized_url}: {e}",
+                            exc_info=True,
+                        )
 
                 if not fetch_success:
                     logger.warning(
-                        f"Both content and announcement fetch failed for {username} - {course_name}. Cache not updated."
+                        f"Both content and announcement fetch failed for {username} - {course_name} ({normalized_url}). Cache not updated."
                     )
-                    continue
+                    continue  # Skip caching if both fetches failed
 
                 # --- Assemble data WITH Mock Week for caching ---
+                # The final structure should be: [CourseAnnouncementDict?, MockWeekDict, WeekDict1, WeekDict2, ...]
                 combined_data_for_cache = []
+                course_announcement_dict_to_add = None  # The dict to potentially add
 
-                # 1. Add Announcement (only if fetch was successful)
-                if new_announcement_dict:
-                    combined_data_for_cache.append(new_announcement_dict)
+                # 1. Transform Announcement (if fetch was successful)
+                if announcement_fetch_result and isinstance(
+                    announcement_fetch_result, dict
+                ):
+                    html_content = announcement_fetch_result.get("announcements_html")
+                    if html_content and html_content.strip():
+                        # *** Create the new dict with the desired key 'course_announcement' ***
+                        course_announcement_dict_to_add = {
+                            "course_announcement": html_content
+                        }
+                        combined_data_for_cache.append(course_announcement_dict_to_add)
+                    else:
+                        # Log if HTML was present but empty/whitespace
+                        if html_content is not None:
+                            logger.info(
+                                f"Overall announcement HTML was empty/whitespace for {normalized_url}"
+                            )
+                elif (
+                    announcement_fetch_result is not None
+                ):  # Log unexpected format from fetch_announcements
+                    logger.warning(
+                        f"fetch_announcements returned unexpected format: {announcement_fetch_result!r}"
+                    )
 
                 # 2. Add Mock Week
                 combined_data_for_cache.append(mock_week)
 
-                # 3. Add Actual Weeks (only if fetch was successful)
-                if new_content_list:
-                    combined_data_for_cache.extend(new_content_list)
+                # 3. Add Actual Weeks (only if fetch was successful and returned a list)
+                if (
+                    new_content_list is not None
+                ):  # Check for None (failure), allow empty list []
+                    if isinstance(new_content_list, list):
+                        combined_data_for_cache.extend(new_content_list)
+                    else:
+                        logger.warning(
+                            f"fetch_cms_content returned unexpected format: {new_content_list!r}"
+                        )
                 # --- End Assembly ---
 
                 # --- Log exactly what is being prepared for cache ---
                 cached_item_summary = []
                 for item in combined_data_for_cache:
-                    if "course_announcement" in item:
-                        cached_item_summary.append("Overall Announcement")
-                    elif "week_name" in item:
-                        cached_item_summary.append(f"Week: {item['week_name']}")
+                    if isinstance(item, dict):
+                        # *** Check for the new key 'course_announcement' ***
+                        if "course_announcement" in item:
+                            cached_item_summary.append("Overall Course Announcement")
+                        elif "week_name" in item:
+                            cached_item_summary.append(f"Week: {item['week_name']}")
+                        else:
+                            cached_item_summary.append("Unknown Dict Item")
                     else:
-                        cached_item_summary.append("Unknown Item Type")
+                        cached_item_summary.append(f"Unknown Item Type: {type(item)}")
+
                 logger.debug(
-                    f"Data prepared for cache key {cache_key} (WITH Mock Week): {cached_item_summary}"
+                    f"Data prepared for cache key {cache_key} (Items: {len(combined_data_for_cache)}): {cached_item_summary}"
                 )
                 # --- End Logging ---
 
-                # Update cache only if we have more than just Mock Week, or if announcement exists
-                if len(combined_data_for_cache) > 1 or (
-                    len(combined_data_for_cache) == 1
-                    and "course_announcement" in combined_data_for_cache[0]
-                ):
-                    if set_in_cache(
-                        cache_key, combined_data_for_cache
-                    ):  # Cache the list WITH mock week
+                # Update cache only if we have more than just Mock Week,
+                # OR if we have exactly Mock Week AND the course announcement dict.
+                has_announcement = course_announcement_dict_to_add is not None
+                has_content_weeks = isinstance(new_content_list, list) and bool(
+                    new_content_list
+                )
+
+                if has_announcement or has_content_weeks:
+                    if set_in_cache(cache_key, combined_data_for_cache):
                         logger.info(
                             f"Successfully refreshed cache for {username} - {course_name}"
                         )
@@ -592,7 +715,7 @@ def refresh_all_caches():
                         )
                 else:
                     logger.warning(
-                        f"Skipped cache update for {username} - {course_name} - resulted in only Mock Week."
+                        f"Skipped cache update for {username} - {course_name} - resulted in only Mock Week and no announcement."
                     )
 
             except Exception as course_err:
