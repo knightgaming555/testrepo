@@ -8,6 +8,10 @@ from flask import Flask, request, jsonify
 from dotenv import load_dotenv
 import redis
 from cryptography.fernet import Fernet
+import urllib3
+
+# Disable insecure request warnings when verification is disabled
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Ensure project root is on the path so we can import scraping functions
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -39,6 +43,9 @@ GUC_DATA_URLS = [
     "https://apps.guc.edu.eg/student_ext/Main/Notifications.aspx",
 ]
 
+# SSL verification configuration
+VERIFY_SSL = os.environ.get("VERIFY_SSL", "True").lower() == "true"
+
 # Import scraping functions (make sure these are defined in your project)
 from cache.refresh_cache import (
     async_scrape_guc_data_fast,
@@ -53,6 +60,23 @@ from api.scraping import (
     cms_scraper,
     scrape_exam_seats,
 )
+
+# Update scraping module's SSL verification setting
+import api.scraping
+
+api.scraping.VERIFY_SSL = VERIFY_SSL
+
+
+# Helper function to get existing cache data
+def get_from_cache(key):
+    try:
+        data = redis_client.get(key)
+        if data:
+            return json.loads(data.decode("utf-8"))
+        return None
+    except Exception as e:
+        print(f"Error getting cache for key {key}: {e}")
+        return None
 
 
 def get_all_stored_users():
@@ -102,55 +126,69 @@ def refresh_cache():
         # SECTION 1: Refresh guc_data and schedule
         if section == "1":
             try:
-                # Call the asynchronous guc_data scraper.
-                # Check if it returns a coroutine. If so, run it with asyncio.run; otherwise, use it directly.
+                # Get existing cache data first
+                cache_key = f"guc_data:{username}"
+                existing_guc_data = get_from_cache(cache_key)
+
+                # Call the asynchronous guc_data scraper
                 result = async_scrape_guc_data_fast(username, password, GUC_DATA_URLS)
                 if asyncio.iscoroutine(result):
                     scrape_result = asyncio.run(result)
                 else:
                     scrape_result = result
-                cache_key = f"guc_data:{username}"
-                redis_client.setex(
-                    cache_key,
-                    1500,
-                    json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
-                )
-                results[username]["guc_data"] = "updated"
+
+                # Only update cache if we got valid data
+                if scrape_result is not None:
+                    redis_client.setex(
+                        cache_key,
+                        1500,
+                        json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
+                    )
+                    results[username]["guc_data"] = "updated"
+                else:
+                    results[username]["guc_data"] = "skipped: error fetching data"
             except Exception as e:
                 results[username]["guc_data"] = f"failed: {str(e)}"
                 traceback.print_exc()
 
             try:
-                # Run schedule scraper in a thread (since it is a synchronous function).
+                # Get existing schedule data
+                schedule_cache_key = f"schedule:{username}"
+                existing_schedule = get_from_cache(schedule_cache_key)
+
+                # Run schedule scraper in a thread (since it is a synchronous function)
                 schedule_result = asyncio.run(
                     asyncio.to_thread(
                         scrape_schedule, username, password, BASE_SCHEDULE_URL_CONFIG
                     )
                 )
 
-                timings = {
-                    "0": "8:15AM-9:45AM",
-                    "1": "10:00AM-11:30AM",
-                    "2": "11:45AM-1:15PM",
-                    "3": "1:45PM-3:15PM",
-                    "4": "3:45PM-5:15PM",
-                }
-                filtered_schedule = filter_schedule_details(
-                    schedule_result
-                )  # Filter the schedule
-                schedule_response_data = (
-                    filtered_schedule,
-                    timings,
-                )  # Structure the data with timings
-                schedule_cache_key = f"schedule:{username}"
-                redis_client.setex(
-                    schedule_cache_key,
-                    5184000,
-                    json.dumps(schedule_response_data, ensure_ascii=False).encode(
-                        "utf-8"
-                    ),  # Cache the structured data
-                )
-                results[username]["schedule"] = "updated"
+                # Only update if we got valid data
+                if schedule_result is not None:
+                    timings = {
+                        "0": "8:15AM-9:45AM",
+                        "1": "10:00AM-11:30AM",
+                        "2": "11:45AM-1:15PM",
+                        "3": "1:45PM-3:15PM",
+                        "4": "3:45PM-5:15PM",
+                    }
+                    filtered_schedule = filter_schedule_details(
+                        schedule_result
+                    )  # Filter the schedule
+                    schedule_response_data = (
+                        filtered_schedule,
+                        timings,
+                    )  # Structure the data with timings
+                    redis_client.setex(
+                        schedule_cache_key,
+                        5184000,
+                        json.dumps(schedule_response_data, ensure_ascii=False).encode(
+                            "utf-8"
+                        ),  # Cache the structured data
+                    )
+                    results[username]["schedule"] = "updated"
+                else:
+                    results[username]["schedule"] = "skipped: error fetching data"
             except Exception as e:
                 results[username]["schedule"] = f"failed: {str(e)}"
                 traceback.print_exc()
@@ -158,31 +196,47 @@ def refresh_cache():
         # SECTION 2: Refresh CMS data and grades
         elif section == "2":
             try:
+                # Get existing CMS data
+                cms_cache_key = f"cms:{username}"
+                existing_cms = get_from_cache(cms_cache_key)
+
                 cms_result = asyncio.run(
                     asyncio.to_thread(cms_scraper, username, password, None, 3, 2, True)
                 )
-                cms_cache_key = f"cms:{username}"
-                redis_client.setex(
-                    cms_cache_key,
-                    2592000,
-                    json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
-                )
-                results[username]["cms"] = "updated"
+
+                # Only update if we got valid data
+                if cms_result is not None:
+                    redis_client.setex(
+                        cms_cache_key,
+                        2592000,
+                        json.dumps(cms_result, ensure_ascii=False).encode("utf-8"),
+                    )
+                    results[username]["cms"] = "updated"
+                else:
+                    results[username]["cms"] = "skipped: error fetching data"
             except Exception as e:
                 results[username]["cms"] = f"failed: {str(e)}"
                 traceback.print_exc()
 
             try:
+                # Get existing grades data
+                grades_cache_key = f"grades:{username}"
+                existing_grades = get_from_cache(grades_cache_key)
+
                 grades_result = asyncio.run(
                     asyncio.to_thread(scrape_grades, username, password)
                 )
-                grades_cache_key = f"grades:{username}"
-                redis_client.setex(
-                    grades_cache_key,
-                    1500,
-                    json.dumps(grades_result, ensure_ascii=False).encode("utf-8"),
-                )
-                results[username]["grades"] = "updated"
+
+                # Only update if we got valid data
+                if grades_result is not None:
+                    redis_client.setex(
+                        grades_cache_key,
+                        1500,
+                        json.dumps(grades_result, ensure_ascii=False).encode("utf-8"),
+                    )
+                    results[username]["grades"] = "updated"
+                else:
+                    results[username]["grades"] = "skipped: error fetching data"
             except Exception as e:
                 results[username]["grades"] = f"failed: {str(e)}"
                 traceback.print_exc()
@@ -190,6 +244,10 @@ def refresh_cache():
         # SECTION 3: Refresh attendance and exam seats
         elif section == "3":
             try:
+                # Get existing attendance data
+                attendance_cache_key = f"attendance:{username}"
+                existing_attendance = get_from_cache(attendance_cache_key)
+
                 attendance_result = asyncio.run(
                     asyncio.to_thread(
                         scrape_attendance,
@@ -200,28 +258,44 @@ def refresh_cache():
                         2,
                     )
                 )
-                attendance_cache_key = f"attendance:{username}"
-                redis_client.setex(
-                    attendance_cache_key,
-                    1500,
-                    json.dumps(attendance_result, ensure_ascii=False).encode("utf-8"),
-                )
-                results[username]["attendance"] = "updated"
+
+                # Only update if we got valid data
+                if attendance_result is not None:
+                    redis_client.setex(
+                        attendance_cache_key,
+                        1500,
+                        json.dumps(attendance_result, ensure_ascii=False).encode(
+                            "utf-8"
+                        ),
+                    )
+                    results[username]["attendance"] = "updated"
+                else:
+                    results[username]["attendance"] = "skipped: error fetching data"
             except Exception as e:
                 results[username]["attendance"] = f"failed: {str(e)}"
                 traceback.print_exc()
 
             try:
+                # Get existing exam seats data
+                exam_seats_cache_key = f"exam_seats:{username}"
+                existing_exam_seats = get_from_cache(exam_seats_cache_key)
+
                 exam_seats_result = asyncio.run(
                     asyncio.to_thread(scrape_exam_seats, username, password)
                 )
-                exam_seats_cache_key = f"exam_seats:{username}"
-                redis_client.setex(
-                    exam_seats_cache_key,
-                    1500,
-                    json.dumps(exam_seats_result, ensure_ascii=False).encode("utf-8"),
-                )
-                results[username]["exam_seats"] = "updated"
+
+                # Only update if we got valid data
+                if exam_seats_result is not None:
+                    redis_client.setex(
+                        exam_seats_cache_key,
+                        1500,
+                        json.dumps(exam_seats_result, ensure_ascii=False).encode(
+                            "utf-8"
+                        ),
+                    )
+                    results[username]["exam_seats"] = "updated"
+                else:
+                    results[username]["exam_seats"] = "skipped: error fetching data"
             except Exception as e:
                 results[username]["exam_seats"] = f"failed: {str(e)}"
                 traceback.print_exc()

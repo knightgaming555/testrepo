@@ -5,12 +5,12 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from cryptography.fernet import Fernet
-
+import sys
 import redis
 import json
 import logging  # Import logging module
 from datetime import datetime
-
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from api.scraping import (
     authenticate_user,
     scrape_guc_data,
@@ -19,6 +19,13 @@ from api.scraping import (
     scrape_grades,
     scrape_attendance,
     scrape_exam_seats,
+)
+
+from api.guc_data import (
+    get_dev_announcement, 
+    set_dev_announcement, 
+
+    config
 )
 
 
@@ -43,7 +50,8 @@ class Config:
 config = Config()
 app = Flask(__name__, template_folder="../templates")
 CORS(app)
-
+API_LOG_KEY = "api_logs"
+MAX_LOG_ENTRIES = 1000
 redis_client = redis.from_url(os.environ.get("REDIS_URL"))
 
 # Set up logging
@@ -148,11 +156,90 @@ def after_api_request(response):
         log_api_request(request.path, response.status_code)  # Log AFTER response
     return response
 
+def get_all_user_activity():
+    """Retrieve activity data for all users."""
+    all_activity = {}
+    user_keys = redis_client.keys("user_activity:*")
+    
+    for key in user_keys:
+        username = key.decode().split(":", 1)[1]
+        activity_data = redis_client.hgetall(key)
+        if activity_data:
+            all_activity[username] = {k.decode(): v.decode() for k, v in activity_data.items()}
+    
+    return all_activity
+
 
 @app.route("/")
 def index():
     return jsonify({"message": "Welcome to the API!"}), 200
 
+@app.route("/api/user-activity", methods=["GET"])
+def api_user_activity():
+    """API endpoint to retrieve user activity data.
+    
+    Query parameters:
+    - username: Optional. If provided, returns activity for specific user.
+                If not provided, returns activity for all users.
+    - secret: Required for security. Must match ADMIN_SECRET env variable.
+    """
+    # Check admin secret for authorization
+    
+    # Get username from query parameters (optional)
+    username = request.args.get("username")
+    
+    if username:
+        # Get activity for specific user
+        activity_data = get_user_activity(username)
+        if not activity_data:
+            return jsonify({"error": f"No activity data found for user: {username}"}), 404
+        return jsonify({username: activity_data}), 200
+    else:
+        # Get activity for all users
+        all_activity = get_all_user_activity()
+        return jsonify(all_activity), 200
+
+
+# Add this import at the top of the file if not already present
+
+# Add this endpoint to your app.py file
+@app.route("/admin/announcement", methods=["GET", "POST"])
+def admin_announcement():
+    # Check for admin secret key
+    secret = request.headers.get("Admin-Secret")
+    if not secret or secret != config.CACHE_REFRESH_SECRET:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    
+    if request.method == "GET":
+        try:
+            return jsonify({
+                "status": "success",
+                "announcement": get_dev_announcement(),
+                # Removed "users" field
+            }), 200
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+    
+    elif request.method == "POST":
+        try:
+            data = request.get_json()
+            if not data:
+                return jsonify({"status": "error", "message": "Missing data"}), 400
+            
+            # Update announcement if provided
+            if "announcement" in data:
+                set_dev_announcement(data["announcement"])
+            
+            # Update users if provided
+        
+            return jsonify({
+                "status": "success", 
+                "message": "Announcement updated",
+                "current_announcement": get_dev_announcement(),
+                # Removed "current_users" field
+            }), 200
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route("/admin/config", methods=["GET"])
 def admin_config():
@@ -512,6 +599,22 @@ def debug_redis_whitelist():
     )
 
 
+@app.route("/admin/country_stats", methods=["GET"])
+def admin_country_stats():
+    """
+    Return the number of users per country.
+    Uses the Redis hash "user_countries" where each key is a username and
+    the value is the user's country.
+    """
+    user_countries = redis_client.hgetall("user_countries")
+    stats = {}
+    for username, country in user_countries.items():
+        # Decode the value if needed
+        country = country.decode() if isinstance(country, bytes) else country
+        stats[country] = stats.get(country, 0) + 1
+    return jsonify(stats), 200
+
+
 @app.route("/debug/version", methods=["GET"])
 def debug_version():
     version_number_raw = redis_client.get("VERSION_NUMBER")
@@ -519,6 +622,28 @@ def debug_version():
     return jsonify({"version_number": version_number})
 
 
+@app.route("/api/logs", methods=["GET"])
+def api_logs_new():
+    """Retrieves the last N API logs from Redis."""
+    try:
+        log_entries_json = redis_client.lrange(API_LOG_KEY, 0, MAX_LOG_ENTRIES - 1)
+        logs = []
+        for entry_json in log_entries_json:
+            try:
+                logs.append(json.loads(entry_json))
+            except json.JSONDecodeError as e:
+                print(f"Error decoding log entry from Redis: {e}. Entry: {entry_json}")
+                logs.append({"error": "Failed to parse log entry", "raw_entry": entry_json[:100]}) 
+
+        return jsonify(logs), 200
+    except redis.exceptions.ConnectionError as e:
+        print(f"Error retrieving logs from Redis (connection): {e}")
+        return jsonify({"error": "Failed to connect to log storage"}), 503
+    except Exception as e:
+        print(f"Error retrieving logs from Redis: {e}")
+        return jsonify({"error": "Failed to retrieve logs from storage"}), 500
+
+
 # For local testing only. Vercel will import the app as a WSGI application.
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(host="0.0.0.0", port=5001, debug=True)

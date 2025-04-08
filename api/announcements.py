@@ -1,4 +1,5 @@
 import os
+
 import time
 from datetime import datetime
 from flask import Flask, request, jsonify
@@ -6,6 +7,9 @@ import redis
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from api.scraping import (
     authenticate_user,
     scrape_course_announcements,
@@ -47,13 +51,6 @@ def api_announcements():
         encrypted = fernet.encrypt(password.encode()).decode()
         redis_client.hset("user_credentials", username, encrypted)
 
-    def is_user_authorized(username):
-        whitelist_raw = redis_client.get("WHITELIST")
-        if whitelist_raw:
-            whitelist = [u.strip() for u in whitelist_raw.decode().split(",")]
-            return username in whitelist
-        return False
-
     # Retrieve parameters from the request
     username = request.args.get("username")
     password = request.args.get("password")
@@ -64,14 +61,6 @@ def api_announcements():
         return (
             jsonify({"status": "error", "message": "Missing username or password"}),
             400,
-        )
-
-    if not is_user_authorized(username):
-        return (
-            jsonify(
-                {"status": "error", "message": "User is not authorized", "data": None}
-            ),
-            403,
         )
 
     stored_users = get_all_stored_users()
@@ -128,6 +117,14 @@ def api_announcements():
     else:
         log_event(f"Failed to scrape announcements for user: {username}")
         return jsonify({"error": "Failed to fetch announcement data"}), 500
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
 
 
 if __name__ == "__main__":

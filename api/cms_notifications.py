@@ -6,7 +6,9 @@ import redis
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import sys
 
+sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from api.scraping import (
     authenticate_user,
     scrape_notifications,
@@ -36,12 +38,6 @@ app = Flask(__name__)
 
 @app.route("/api/cms_notifications", methods=["GET"])
 def api_cms_notifications():
-    def is_user_authorized(username):
-        whitelist_raw = redis_client.get("WHITELIST")
-        if whitelist_raw:
-            whitelist = [u.strip() for u in whitelist_raw.decode().split(",")]
-            return username in whitelist
-        return False
 
     def get_all_stored_users():
         stored = redis_client.hgetall("user_credentials")
@@ -57,11 +53,6 @@ def api_cms_notifications():
         return (
             jsonify({"status": "error", "message": "Missing username or password"}),
             400,
-        )
-    if not is_user_authorized(username):
-        return (
-            jsonify({"status": "error", "message": "User not authorized"}),
-            403,
         )
 
     if username in get_all_stored_users():
@@ -119,6 +110,14 @@ def api_cms_notifications():
     else:
         log_event(f"Failed to scrape CMS notifications for user: {username}")
         return jsonify([]), 200
+
+
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
 
 
 if __name__ == "__main__":
