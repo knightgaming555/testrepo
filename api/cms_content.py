@@ -1,4 +1,4 @@
-# cms_content_api.py (Full Endpoint Code - Caching Mock Week Approach)
+# cms_content_api.py (Corrected to use 'course_announcement' key without extra data)
 
 import os
 import hashlib
@@ -21,6 +21,7 @@ import traceback  # For detailed error logging
 try:
     # Assuming the script is run from the directory containing the 'api' folder
     # or that the 'api' folder's parent is already in sys.path
+    # Assumes scrape_course_announcements returns {"announcements_html": "..."} or {"error": ...}
     from api.scraping import scrape_course_announcements
 except ImportError:
     # Fallback if the structure is different or import fails
@@ -43,6 +44,7 @@ except ImportError:
         ):
             logging.warning("Using dummy scrape_course_announcements function.")
             # Return an error structure similar to what the real function might return on failure
+            # return {"announcements_html": "<p>Dummy Announcement</p>"}
             return {"error": "Dummy function: Overall announcement section not found"}
 
 
@@ -353,6 +355,7 @@ def parse_single_week(week_div):
                 next_node = div.next
                 para_text = ""
                 while next_node:
+                    # Find the paragraph text associated with the strong tag
                     if next_node.tag == "p" and "m-2" in next_node.attributes.get(
                         "class", ""
                     ):
@@ -363,6 +366,7 @@ def parse_single_week(week_div):
                             .strip()
                         )
                         break
+                    # Stop if we hit the next section header or the content cards
                     if next_node.tag == "div" and (
                         next_node.css_first("strong")
                         or next_node.css_first(".card.mb-4")
@@ -370,23 +374,31 @@ def parse_single_week(week_div):
                         break
                     next_node = next_node.next
 
-                if "announcement" in header_text:
-                    parent_style = div.attributes.get("style", "")
-                    if "display:none" not in parent_style.replace(" ", ""):
-                        week_data["announcement"] = para_text
-                elif "description" in header_text:
+                # Assign text based on header, checking if the div is hidden
+                parent_style = div.attributes.get("style", "")
+                is_hidden = "display:none" in parent_style.replace(" ", "")
+
+                if "announcement" in header_text and not is_hidden:
+                    week_data["announcement"] = para_text
+                elif (
+                    "description" in header_text
+                ):  # Description might be present even if hidden? Keep as is.
                     week_data["description"] = para_text
                 elif "content" in header_text:
-                    break  # Stop after finding content header
+                    break  # Stop searching for announcement/description after finding content header
 
     content_cards = week_div.css("div.p-3 .card.mb-4")
     if content_cards:
+        # Use concurrency for parsing multiple items if beneficial
         num_workers = min(len(content_cards), (os.cpu_count() or 1))
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=num_workers, thread_name_prefix="ContentParse"
-        ) as executor:
-            contents = list(executor.map(parse_content_item, content_cards))
-        week_data["contents"] = [c for c in contents if c]
+        if num_workers > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=num_workers, thread_name_prefix="ContentParse"
+            ) as executor:
+                contents = list(executor.map(parse_content_item, content_cards))
+        else:
+            contents = [parse_content_item(card) for card in content_cards]
+        week_data["contents"] = [c for c in contents if c]  # Filter out None results
 
     return week_data
 
@@ -405,26 +417,32 @@ def fast_parse_content(html_content):
             )
             return []
 
-        if len(week_divs) < 5:
-            weeks = [parse_single_week(div) for div in week_divs]
-        else:
+        # Use concurrency for parsing multiple weeks if beneficial
+        if len(week_divs) >= 5:  # Threshold for using threads
             num_workers = min(len(week_divs), (os.cpu_count() or 1) * 2)
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=num_workers, thread_name_prefix="WeekParse"
             ) as executor:
                 weeks = list(executor.map(parse_single_week, week_divs))
+        else:  # Parse sequentially for fewer weeks
+            weeks = [parse_single_week(div) for div in week_divs]
 
-        valid_weeks = [w for w in weeks if w]
+        valid_weeks = [
+            w for w in weeks if w
+        ]  # Filter out None results from parsing errors
 
+        # Sort weeks by date (newest first)
         try:
 
             def get_week_date(week_dict):
                 name = week_dict.get("week_name", "")
                 try:
+                    # Assumes format "Week: YYYY-MM-DD" or similar ending
                     date_str = name.split(":")[-1].strip()
                     return datetime.strptime(date_str, "%Y-%m-%d")
                 except (ValueError, IndexError):
-                    return datetime.min
+                    # Return a very old date for weeks without a parsable date
+                    return datetime.min  # Use min for reverse sort (newest first)
 
             valid_weeks.sort(key=get_week_date, reverse=True)
         except Exception as sort_err:
@@ -435,13 +453,13 @@ def fast_parse_content(html_content):
         return valid_weeks
     except Exception as e:
         logger.exception(f"Error during HTML content parsing: {e}")
-        return []
+        return []  # Return empty list on major parsing error
 
 
 # --- Combined CMS Scraper Function ---
 def cms_scraper(username, password, course_url, force_fetch=False):
     """Fetches and parses CMS content and announcements.
-    Caches data WITH Mock Week included.
+    Caches data WITH Mock Week included, using 'course_announcement' key.
     Returns final list WITH Mock Week inserted.
     """
     normalized_url = normalize_course_url(course_url)
@@ -458,13 +476,42 @@ def cms_scraper(username, password, course_url, force_fetch=False):
 
     # 1. Try cache first (unless forced)
     if not force_fetch:
-        cached_data = get_from_cache(key)  # Expected: [Announce?, Mock, Weeks]
+        cached_data = get_from_cache(key)  # Expected: [CourseAnnounce?, Mock, Weeks]
         if cached_data is not None:
-            logger.info(
-                f"Using cached CMS data for {username} and course {normalized_url}"
-            )
-            # Assume cache already has the correct structure [Announce?, Mock, Weeks]
-            return cached_data  # Return cache directly
+            # Basic validation of cached structure
+            if isinstance(cached_data, list) and len(cached_data) > 0:
+                # Check if Mock Week seems present (usually second item)
+                mock_present = (
+                    len(cached_data) > 1
+                    and isinstance(cached_data[1], dict)
+                    and cached_data[1].get("week_name") == "Mock Week"
+                )
+                # Check if announcement dict (if present) has the correct key
+                announce_key_ok = True
+                if (
+                    isinstance(cached_data[0], dict)
+                    and cached_data[0].get("week_name") != "Mock Week"
+                ):  # Check if first item is announcement dict
+                    if "course_announcement" not in cached_data[0]:
+                        announce_key_ok = False
+                        logger.warning(
+                            f"Cached data for {key} has incorrect announcement key. Fetching fresh."
+                        )
+
+                if mock_present and announce_key_ok:
+                    logger.info(
+                        f"Using cached CMS data for {username} and course {normalized_url}"
+                    )
+                    return cached_data  # Return cache directly
+                else:
+                    logger.warning(
+                        f"Cached data for {key} has unexpected structure (Mock Week missing/misplaced or wrong announce key?). Fetching fresh."
+                    )
+            else:
+                logger.warning(
+                    f"Cached data for {key} is invalid ({type(cached_data)}). Fetching fresh."
+                )
+        # If cache miss or invalid, proceed to fetch
 
     # --- Cache Miss or Force Fetch ---
     logger.info(f"Fetching fresh CMS data for {username} and course {normalized_url}")
@@ -474,13 +521,14 @@ def cms_scraper(username, password, course_url, force_fetch=False):
     try:
         response = session.get(
             normalized_url, timeout=session.timeout, verify=VERIFY_SSL
-        )  # Use verify flag
-        response.raise_for_status()
+        )
+        response.raise_for_status()  # Check for 4xx/5xx errors
         html_content = response.text
         if not html_content:
             logger.error(f"Received empty content for {normalized_url}")
             return {"error": "Received empty content from CMS."}
 
+        # Check for login page redirection after successful status code
         temp_parser = HTMLParser(html_content)
         page_title_node = temp_parser.css_first("title")
         page_title = page_title_node.text().lower() if page_title_node else ""
@@ -490,6 +538,7 @@ def cms_scraper(username, password, course_url, force_fetch=False):
                 logger.warning(
                     f"Authentication likely failed for {username} - redirected to login page for {normalized_url}"
                 )
+                # Even if status was 200, treat login page as auth failure
                 return {"error": "Authentication failed or session expired."}
 
         # 3. Parse content and announcements concurrently
@@ -497,67 +546,119 @@ def cms_scraper(username, password, course_url, force_fetch=False):
             max_workers=2, thread_name_prefix="Scrape"
         ) as executor:
             content_future = executor.submit(fast_parse_content, html_content)
+            # Assuming scrape_course_announcements returns {"announcements_html": "..."} or {"error": ...}
             announcements_future = executor.submit(
                 scrape_course_announcements,
                 username,
                 password,
                 normalized_url,
-                max_retries=2,
+                max_retries=2,  # Retries handled within scrape_course_announcements
                 retry_delay=1,
             )
-            content_weeks = content_future.result()  # List of week dicts
-            announcements_result = (
-                announcements_future.result()
-            )  # Dict { "announcements_html": "..." } or None or Dict { "error": "..." }
+            content_weeks = (
+                content_future.result()
+            )  # List of week dicts (can be empty) or [] on parse error
+            announcements_result = announcements_future.result()  # Dict or None
 
-        overall_announcements_html = None
         announcement_error = None
+        course_announcement_dict_to_add = (
+            None  # The dict to potentially add to the list
+        )
+
         if isinstance(announcements_result, dict):
-            if "announcements_html" in announcements_result:
-                overall_announcements_html = announcements_result["announcements_html"]
-            elif "error" in announcements_result:
+            # *** Extract HTML using the key returned by scrape_course_announcements ***
+            html_content = announcements_result.get("announcements_html")
+            if html_content and html_content.strip():  # Check if not empty/whitespace
+                # *** Create the new dict with the desired key 'course_announcement' ***
+                course_announcement_dict_to_add = {"course_announcement": html_content}
+            elif (
+                "error" in announcements_result
+            ):  # Check for error key if announcements_html is missing/empty
                 announcement_error = announcements_result["error"]
                 logger.error(
-                    f"Error scraping overall announcements: {announcement_error}"
+                    f"Error scraping overall announcements for {normalized_url}: {announcement_error}"
                 )
-        else:
+            else:  # Log if HTML was present but empty/whitespace, or dict had unexpected keys
+                if html_content is not None:
+                    logger.info(
+                        f"Overall announcement HTML was empty/whitespace for {normalized_url}"
+                    )
+                else:
+                    logger.warning(
+                        f"scrape_course_announcements returned dict without expected keys: {announcements_result.keys()}"
+                    )
+        elif announcements_result is not None:  # Handle unexpected return types
             logger.warning(
-                f"Unexpected result from scrape_course_announcements: {type(announcements_result)}"
+                f"Unexpected result type from scrape_course_announcements: {type(announcements_result)}"
             )
 
-        # 4. Check if anything was found
-        if not overall_announcements_html and not content_weeks:
-            # If content_weeks is None (parsing failed) or empty list, AND no announcement
+        # 4. Check if anything was found (content or announcements)
+        # We need course_announcement_dict_to_add to be non-None OR content_weeks to be non-empty list
+        if not course_announcement_dict_to_add and not (
+            isinstance(content_weeks, list) and content_weeks
+        ):
             error_detail = "Failed to find any course content (weeks) or overall announcements on the page."
             if announcement_error:
                 error_detail += f" Announcement scraping failed: {announcement_error}."
+            elif content_weeks == []:  # Parsing succeeded but found nothing
+                error_detail += " No week sections found."
+            else:  # Parsing likely failed if content_weeks is not a list
+                error_detail += " Content parsing may have failed."
             error_detail += " Check the URL, course structure, or user permissions."
             logger.warning(
                 f"No content or announcements parsed for {normalized_url}. Details: {error_detail}"
             )
-            return {"error": error_detail}
+            # Return error only if BOTH failed.
+            if not course_announcement_dict_to_add and not isinstance(
+                content_weeks, list
+            ):
+                return {"error": error_detail}
+            elif (
+                not course_announcement_dict_to_add
+                and isinstance(content_weeks, list)
+                and not content_weeks
+            ):
+                return {"error": error_detail}
 
         # 5. Assemble final list WITH Mock Week for caching and returning
+        # Structure: [CourseAnnouncementDict?, MockWeekDict, WeekDict1, WeekDict2, ...]
         combined_data_for_cache_and_return = []
-        if overall_announcements_html:
+        if course_announcement_dict_to_add:
             combined_data_for_cache_and_return.append(
-                {"course_announcement": overall_announcements_html}
-            )  # 1. Announce
+                course_announcement_dict_to_add
+            )  # 1. Announce (using correct key)
         combined_data_for_cache_and_return.append(mock_week)  # 2. Mock Week
-        if content_weeks:  # Check if content_weeks is not None and not empty list
-            combined_data_for_cache_and_return.extend(content_weeks)  # 3. Actual Weeks
+        if isinstance(
+            content_weeks, list
+        ):  # Ensure content_weeks is a list before extending
+            combined_data_for_cache_and_return.extend(
+                content_weeks
+            )  # 3. Actual Weeks (can be empty list)
 
-        # Cache the data (only if we have more than just Mock Week, or if announcement exists)
-        # This condition ensures we don't cache just [MockWeek] if both fetches failed.
-        if len(combined_data_for_cache_and_return) > 1 or (
-            len(combined_data_for_cache_and_return) == 1
-            and "course_announcement" in combined_data_for_cache_and_return[0]
+        # Cache the data only if we have something beyond just the Mock Week
+        # (i.e., either announcements were found OR content weeks were found)
+        if course_announcement_dict_to_add or (
+            isinstance(content_weeks, list) and content_weeks
         ):
             set_in_cache(key, combined_data_for_cache_and_return)
+            # Log summary of cached items
+            cached_item_summary = []
+            for item in combined_data_for_cache_and_return:
+                if isinstance(item, dict):
+                    # *** Check for the new key 'course_announcement' ***
+                    if "course_announcement" in item:
+                        cached_item_summary.append("Overall Course Announcement")
+                    elif "week_name" in item:
+                        cached_item_summary.append(f"Week: {item['week_name']}")
+                    else:
+                        cached_item_summary.append("Unknown Dict")
+                else:
+                    cached_item_summary.append(f"Unknown Type: {type(item)}")
             logger.debug(
-                f"Data cached for key {key} (WITH Mock Week): {[item.get('week_name', 'Overall Announcement') for item in combined_data_for_cache_and_return]}"
+                f"Data cached for key {key} (Items: {len(combined_data_for_cache_and_return)}): {cached_item_summary}"
             )
         else:
+            # This case should ideally not be reached due to the check in step 4, but added for safety
             logger.warning(
                 f"Only Mock Week resulted from fresh fetch for {key}. Not caching."
             )
@@ -584,6 +685,7 @@ def cms_scraper(username, password, course_url, force_fetch=False):
         else:
             return {"error": f"CMS server error: Received status {status_code}"}
     except requests.exceptions.RequestException as e:
+        # Handle potential DNS errors, connection refused, etc.
         logger.error(
             f"Network error fetching CMS data for {username} at {normalized_url}: {e}"
         )
@@ -592,11 +694,12 @@ def cms_scraper(username, password, course_url, force_fetch=False):
         logger.exception(
             f"Unexpected error in cms_scraper for {username} at {normalized_url}: {e}"
         )
-        return {"error": f"An unexpected internal error occurred: {e}"}
+        # Generic error for unexpected issues during scraping/parsing
+        return {"error": f"An unexpected internal error occurred during scraping: {e}"}
 
 
 # --- Async Redis Logging Setup ---
-API_LOG_KEY = "api_logs"  # Specific key for this API
+API_LOG_KEY = "api_logs:cms_content"  # Specific key for this API's logs
 MAX_LOG_ENTRIES = 5000
 log_executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=5, thread_name_prefix="LogThread"
@@ -606,21 +709,31 @@ log_executor = concurrent.futures.ThreadPoolExecutor(
 def _log_to_redis_task(log_entry_dict):
     """Task to push a log entry to Redis list."""
     if not redis_client:
-        logger.warning(f"Redis unavailable. Local log: {log_entry_dict}")
+        # Fallback to standard logger if Redis is down
+        logger.warning(f"Redis unavailable for logging. Local log: {log_entry_dict}")
         return
     try:
-        log_entry_json = json.dumps(log_entry_dict)
+        # Ensure all values are JSON serializable
+        serializable_log_entry = json.loads(json.dumps(log_entry_dict, default=str))
+        log_entry_json = json.dumps(serializable_log_entry)
+
         log_key_bytes = API_LOG_KEY.encode("utf-8")
         log_entry_bytes = log_entry_json.encode("utf-8")
+
+        # Use pipeline for atomic LPUSH and LTRIM
         pipe = redis_client.pipeline()
         pipe.lpush(log_key_bytes, log_entry_bytes)
         pipe.ltrim(log_key_bytes, 0, MAX_LOG_ENTRIES - 1)
-        pipe.execute()
+        results = pipe.execute()
+        # Optional: Check results for errors if needed
+        # if not all(results): logger.error("Error in Redis logging pipeline execution.")
+
     except redis.exceptions.TimeoutError:
         logger.error("Redis timeout during async logging.")
     except redis.exceptions.ConnectionError as e:
         logger.error(f"Redis connection error during async logging: {e}")
     except TypeError as e:
+        # Log the original dict for easier debugging
         logger.error(
             f"Log serialization error: {e}. Log entry: {log_entry_dict}", exc_info=True
         )
@@ -635,41 +748,46 @@ app = Flask(__name__)
 # --- Request Hooks for Logging ---
 @app.before_request
 def before_request_func():
-    """Initialize request context."""
+    """Initialize request context for logging."""
     g.start_time = perf_counter()
     g.request_time = datetime.now(timezone.utc)
-    g.username = None
-    g.log_outcome = "unknown"
-    g.log_error_message = None
+    g.username = None  # Will be set in endpoint if available
+    g.log_outcome = "unknown"  # Default outcome
+    g.log_error_message = None  # Specific error message
 
 
 @app.after_request
 def after_request_handler(response):
     """Logs request details asynchronously and adds CORS headers."""
+    # Skip logging for OPTIONS requests and specific utility endpoints
     if request.method == "OPTIONS" or request.path in [
         "/api/logs",
         "/api/test_form",
         "/favicon.ico",
     ]:
+        # Still add CORS headers for these paths if needed
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         response.headers["Access-Control-Allow-Methods"] = (
             "GET, POST, PUT, DELETE, OPTIONS"
         )
-        response.headers["Access-Control-Max-Age"] = "86400"
+        response.headers["Access-Control-Max-Age"] = "86400"  # Cache preflight response
         return response
 
+    # Log other requests
     raw_ua_header = request.headers.get("User-Agent", "Unknown")
-    final_user_agent = raw_ua_header[:250]
+    final_user_agent = raw_ua_header[:250]  # Truncate long UAs
 
     elapsed_ms = (perf_counter() - g.start_time) * 1000
     log_entry = {
-        "username": getattr(g, "username", None),
+        "username": getattr(g, "username", None),  # Get username set in endpoint
         "endpoint": request.path,
         "method": request.method,
         "status_code": response.status_code,
-        "outcome": getattr(g, "log_outcome", "unknown"),
-        "error_message": getattr(g, "log_error_message", None),
+        "outcome": getattr(g, "log_outcome", "unknown"),  # Get outcome set in endpoint
+        "error_message": getattr(
+            g, "log_error_message", None
+        ),  # Get error set in endpoint
         "time_elapsed_ms": round(elapsed_ms, 2),
         "request_timestamp_utc": getattr(
             g, "request_time", datetime.now(timezone.utc)
@@ -678,16 +796,21 @@ def after_request_handler(response):
         "ip_address": request.headers.get("X-Forwarded-For", request.remote_addr)
         or "Unknown",
         "user_agent": final_user_agent,
-        "request_args": {
+        "request_args": {  # Log query params, masking password
             k: ("********" if k == "password" else v) for k, v in request.args.items()
         },
+        # Add request body logging if needed (be careful with large bodies/sensitive data)
+        # 'request_body': request.get_json(silent=True) if request.is_json else None
     }
 
     try:
+        # Submit logging task to background thread pool
         log_executor.submit(_log_to_redis_task, log_entry)
     except Exception as e:
+        # Log error if submitting task fails, but don't block response
         logger.error(f"Error submitting log task to executor: {e}", exc_info=True)
 
+    # Add CORS headers to actual API responses
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
@@ -699,13 +822,13 @@ def after_request_handler(response):
 @app.route("/api/cms_content", methods=["GET"])
 def get_cms_content():
     """API endpoint to get CMS content and announcements."""
-    start_time = perf_counter()
+    start_time = perf_counter()  # Local start time for endpoint duration logging
 
     # --- Bot Health Check ---
     bot_param = request.args.get("bot")
     if bot_param and bot_param.lower() == "true":
         logger.info("Received bot health check request for CMS Content API.")
-        g.log_outcome = "bot_check_success"
+        g.log_outcome = "bot_check_success"  # Set outcome for logging
         return (
             jsonify(
                 {
@@ -736,11 +859,13 @@ def get_cms_content():
         error_msg = f"Missing required parameters: {', '.join(missing_params)}."
         g.log_outcome = "validation_error"
         g.log_error_message = error_msg
-        g.username = username or "unknown"
+        g.username = (
+            username or "unknown"
+        )  # Log username if provided even if other params missing
         logger.warning(f"Validation error for user {g.username}: {error_msg}")
         return jsonify({"error": error_msg}), 400
 
-    g.username = username  # Set for logging
+    g.username = username  # Set username in context for logging
 
     logger.info(
         f"Processing request for user {username}, course: {course_url}, force_fetch: {force_fetch}"
@@ -755,44 +880,48 @@ def get_cms_content():
         logger.error(
             f"Scraper failed for user {username}, course {course_url}: {error_msg}"
         )
-        g.log_error_message = error_msg
-        # Determine status code and outcome based on error message
+        g.log_error_message = error_msg  # Set error message for logging
+
+        # Determine status code and outcome based on error message content
         if "Authentication failed" in error_msg:
             status_code = 401
             g.log_outcome = "auth_error"
         elif (
             "not found" in error_msg.lower()
-            or "Failed to find any course content" in error_msg
+            or "Failed to find any course content"
+            in error_msg  # Specific error from scraper
         ):
             status_code = 404
             g.log_outcome = "not_found"
         elif "timed out" in error_msg.lower() or "Network error" in error_msg.lower():
-            status_code = 504
+            status_code = 504  # Gateway Timeout
             g.log_outcome = "timeout_or_network_error"
         elif (
             "parsing failed" in error_msg.lower()
             or "Failed to parse" in error_msg.lower()
+            or "scraping failed" in error_msg.lower()  # Include scraping errors
         ):
-            status_code = 502
-            g.log_outcome = "parsing_error"
-        else:
+            status_code = 502  # Bad Gateway (upstream parsing/scraping issue)
+            g.log_outcome = "parsing_or_scraping_error"
+        else:  # Catch-all for other internal errors
             status_code = 500
             g.log_outcome = "internal_error"
         return jsonify({"error": error_msg}), status_code
+
     elif isinstance(result_data, list):  # Success case
-        # The list received from cms_scraper already includes Mock Week in the correct place
-        g.log_outcome = "success"
+        # The list received from cms_scraper already includes Mock Week and uses "course_announcement" key
+        g.log_outcome = "success"  # Set success outcome for logging
         logger.info(
             f"Successfully processed request for user {username}, course: {course_url} in {(perf_counter() - start_time)*1000:.2f} ms"
         )
         return jsonify(result_data), 200
     else:
-        # Safeguard for unexpected return type
+        # Safeguard for unexpected return type from cms_scraper
         error_msg = "Scraper returned an unexpected data format."
         logger.error(
             f"Unexpected data format from scraper for {username}, course {course_url}: {type(result_data)}"
         )
-        g.log_outcome = "internal_error"
+        g.log_outcome = "internal_error"  # Log as internal error
         g.log_error_message = error_msg
         return jsonify({"error": error_msg}), 500
 
@@ -800,7 +929,7 @@ def get_cms_content():
 @app.route("/api/test_form", methods=["GET"])
 def test_form():
     """Provides a simple HTML form for testing the API."""
-    # Logging skipped by after_request hook
+    # Logging skipped by after_request hook based on path
     return """
     <!DOCTYPE html>
     <html>
@@ -818,6 +947,7 @@ def test_form():
     <ul>
     <li><code>https://cms.guc.edu.eg/apps/student/CourseViewStn.aspx?id=450&sid=65</code></li>
     <li><code>https://cms.guc.edu.eg/apps/student/CourseViewStn.aspx?id=17&sid=65</code></li>
+    <li><code>https://cms.guc.edu.eg/apps/student/CourseViewStn.aspx?id=79&sid=65</code></li>
     </ul>
     </body>
     </html>
@@ -826,15 +956,16 @@ def test_form():
 
 @app.route("/api/logs", methods=["GET"])
 def api_logs_new():
-    """Retrieves the last N API logs from Redis."""
-    g.username = "log_viewer"  # Indicate log access
+    """Retrieves the last N API logs from Redis for this specific API."""
+    g.username = "log_viewer"  # Indicate log access for context
     if not redis_client:
         g.log_outcome = "redis_error"
         g.log_error_message = "Redis client is not available."
         return jsonify({"error": "Log storage (Redis) is currently unavailable."}), 503
 
     try:
-        log_key_bytes = API_LOG_KEY.encode("utf-8")
+        log_key_bytes = API_LOG_KEY.encode("utf-8")  # Use the specific key
+        # Retrieve logs, newest first (assuming LPUSH)
         log_entries_bytes = redis_client.lrange(log_key_bytes, 0, MAX_LOG_ENTRIES - 1)
         logs = []
         for entry_bytes in log_entries_bytes:
@@ -843,8 +974,9 @@ def api_logs_new():
                 logs.append(json.loads(entry_json))
             except (json.JSONDecodeError, UnicodeDecodeError) as e:
                 logger.error(
-                    f"Error decoding/parsing log entry from Redis: {e}. Entry preview: {entry_bytes[:100]!r}"
+                    f"Error decoding/parsing log entry from Redis key {API_LOG_KEY}: {e}. Entry preview: {entry_bytes[:100]!r}"
                 )
+                # Include a placeholder for corrupted entries
                 logs.append(
                     {
                         "error": "Failed to parse log entry",
@@ -852,36 +984,46 @@ def api_logs_new():
                     }
                 )
 
-        g.log_outcome = "success"
+        g.log_outcome = "success"  # Log viewing success
         return jsonify(logs), 200
     except redis.exceptions.ConnectionError as e:
         g.log_outcome = "redis_error"
         g.log_error_message = f"Redis connection error: {e}"
-        logger.error(f"Error retrieving logs from Redis (connection): {e}")
+        logger.error(
+            f"Error retrieving logs from Redis (connection) key {API_LOG_KEY}: {e}"
+        )
         return jsonify({"error": "Failed to connect to log storage"}), 503
     except Exception as e:
         g.log_outcome = "internal_error"
         g.log_error_message = f"Error retrieving logs: {e}"
-        logger.exception(f"Error retrieving logs from Redis: {e}")
+        logger.exception(f"Error retrieving logs from Redis key {API_LOG_KEY}: {e}")
         return jsonify({"error": "Failed to retrieve logs from storage"}), 500
 
 
 # --- Graceful Shutdown ---
 def shutdown_log_executor():
+    """Shuts down the background logging thread pool."""
     logger.info("Shutting down log executor...")
-    log_executor.shutdown(wait=True)
+    log_executor.shutdown(wait=True)  # Wait for pending tasks to complete
     logger.info("Log executor shut down.")
 
 
+# Register the shutdown function to be called on exit
 atexit.register(shutdown_log_executor)
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5001))  # Use a different default port if needed
+    # Use environment variables for configuration
+    port = int(
+        os.environ.get("PORT", 5000)
+    )  # Use a different default port (e.g., 5001)
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    host = os.environ.get("FLASK_HOST", "0.0.0.0")  # Bind to all interfaces by default
+
     logger.info(
-        f"Starting Flask app (CMS Content API) on port {port} with debug mode: {debug_mode}"
+        f"Starting Flask app (CMS Content API) on {host}:{port} with debug mode: {debug_mode}"
     )
 
-    # Run with Flask's built-in server for debugging
-    app.run(debug=True, host="0.0.0.0", port=port, use_reloader=True)
+    # Run with Flask's built-in server (suitable for development/debugging)
+    # For production, use a proper WSGI server like Gunicorn or uWSGI
+    app.run(debug=debug_mode, host=host, port=port, use_reloader=debug_mode)
