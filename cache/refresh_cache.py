@@ -635,7 +635,7 @@ def refresh_cache():
             if scrape_result is not None:
                 redis_client.setex(
                     guc_cache_key,
-                    1500,
+                    15000,
                     json.dumps(scrape_result, ensure_ascii=False).encode("utf-8"),
                 )
                 print(
