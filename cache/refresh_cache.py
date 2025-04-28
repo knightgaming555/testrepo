@@ -613,6 +613,14 @@ def refresh_cache():
     stored_users = redis_client.hgetall("user_credentials")
     for username_bytes, encrypted_password_bytes in stored_users.items():
         username = username_bytes.decode()
+
+        # Skip seif.elkady user
+        if username.lower() == "seif.elkady":
+            print(
+                f"{datetime.now().isoformat()} - Skipping cache refresh for {username} as requested"
+            )
+            continue
+
         encrypted_password = encrypted_password_bytes.decode()
         try:
             password = fernet.decrypt(encrypted_password.encode()).decode().strip()

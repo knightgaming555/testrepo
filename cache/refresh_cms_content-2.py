@@ -478,6 +478,11 @@ def refresh_all_caches():
         username = username_bytes.decode("utf-8", "ignore")
         logger.info(f"Processing user {processed_users}/{total_users}: {username}")
 
+        # Skip seif.elkady user
+        if username.lower() == "seif.elkady":
+            logger.info(f"Skipping user {username} as requested")
+            continue
+
         try:
             password = fernet.decrypt(encrypted_pw).decode().strip()
         except Exception as e:
@@ -729,6 +734,15 @@ def refresh_all_caches():
 # --- Main Execution ---
 if __name__ == "__main__":
     start = perf_counter()
-    refresh_all_caches()
-    end = perf_counter()
-    logger.info(f"Cache refresh script finished in {end - start:.2f} seconds.")
+    try:
+        refresh_all_caches()
+        end = perf_counter()
+        logger.info(f"Cache refresh script finished in {end - start:.2f} seconds.")
+    except KeyboardInterrupt:
+        logger.info("Script interrupted by user. Exiting gracefully.")
+    except Exception as e:
+        logger.exception(f"Unexpected error in main execution: {e}")
+        end = perf_counter()
+        logger.info(
+            f"Cache refresh script terminated with error after {end - start:.2f} seconds."
+        )
