@@ -12,7 +12,7 @@ jobs:
       - name: Ping all endpoints
         run: |
           # Define the base URL for your API (adjust as needed)
-          BASE_URL="https://v2-guc-scrapper.vercel.app/api"
+          BASE_URL="https://v3-gucscrapper.vercel.app/api"
           # List of endpoints to ping
           endpoints=(
             "announcements?bot=true"
